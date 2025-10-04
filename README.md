@@ -36,34 +36,7 @@ make run
 
 ### Command-Line Options
 
-The demo supports various display and playback options:
-
-```
-./demo [OPTIONS] [SCENE...]
-
-Display Options:
-  -f, --fullscreen   Run in fullscreen mode (scales to display)
-  -w, --window WxH   Set window size (e.g., 1920x1080)
-  -s, --scale N      Integer scaling (e.g., 2 = 1600x1200)
-
-Playback Options:
-  -d, --duration SEC Scene duration in seconds (default: 15)
-  -h, --help         Show help message
-
-Scenes:
-  0 - Starfield      3 - Tunnel           6 - 3D Star Ball
-  1 - Plasma         4 - Bouncing Logo
-  2 - Cube           5 - Raining Logo
-
-Examples:
-  ./demo -f              # Fullscreen, auto-cycle scenes
-  ./demo -s 2            # 2x window size (1600x1200)
-  ./demo -w 1920x1080    # Custom window size
-  ./demo -d 30 2 6       # Show cube & star ball, 30s each
-```
-
-The demo renders internally at 800x600 and scales smoothly to any display
-size while maintaining the 4:3 aspect ratio.
+Run `./demo --help` to see all available options.
 
 ## Distribution
 
@@ -124,3 +97,12 @@ The demo supports MOD/XM/IT tracker music files. To replace the music:
 4. Run `make clean && make`
 
 [6]: https://modarchive.org/
+
+## Customizing Scroll Text
+
+Use the `-t` option to load custom scroll text from a file. This is especially
+useful when running in containers where you can mount your scroll text file:
+
+```bash
+./demo -t /path/to/scroll.txt
+```

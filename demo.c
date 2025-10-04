@@ -12,6 +12,8 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+#include <getopt.h>
+#include <stdlib.h>
 
 /* Embedded font, image, and music data */
 #include "font_data.h"
@@ -74,6 +76,7 @@ typedef struct {
     Uint32 scene_duration;  /* Milliseconds per scene */
     int scene_list[6];      /* Custom scene order */
     int num_scenes;         /* Number of scenes in list */
+    char *scroll_text;      /* Dynamically loaded scroll text */
 } DemoContext;
 
 /* Plasma effect - optimized with lower resolution and LUT */
@@ -906,17 +909,9 @@ void render_raining_logo(DemoContext *ctx)
 /* Scroll text rendering with different styles */
 void render_scroll_text(DemoContext *ctx)
 {
-	const char *text = "Infix OS - The Container demo"
-		"    *** Greetings to the demoscene <3"
-		"    *** API first: NETCONF + RESTCONF"
-		"    *** Say Hi to our mascot, Jack! :-)"
-		"    *** YANG is the real HERO tho ..."
-		"    *** Sponsored by Wires in Westeros"
-		"    *** From idea to production - we've got you!"
-		"    *** Visit us at https://wires.se"
-		"                                *** ";
+	const char *text = ctx->scroll_text;
 
-	if (ctx->scroll_style == SCROLL_NONE)
+	if (ctx->scroll_style == SCROLL_NONE || !text)
 		return;
 
 	int text_len = strlen(text);
@@ -1095,8 +1090,136 @@ void render_scroll_text(DemoContext *ctx)
 	}
 }
 
+static int usage(int rc)
+{
+	printf("Usage: demo [OPTIONS] [SCENE...]\n");
+	printf("\nDisplay Options:\n");
+	printf("  -f, --fullscreen   Run in fullscreen mode (scales to display)\n");
+	printf("  -w, --window WxH   Set window size (e.g., 1920x1080)\n");
+	printf("  -s, --scale N      Integer scaling (e.g., 2 = 1600x1200)\n");
+	printf("\nPlayback Options:\n");
+	printf("  -d, --duration SEC Scene duration in seconds (default: 15)\n");
+	printf("  -t, --text FILE    Load scroll text from file\n");
+	printf("  -h, --help         Show this help message\n");
+	printf("\nScenes:\n");
+	printf("  0 - Starfield      3 - Tunnel           6 - 3D Star Ball\n");
+	printf("  1 - Plasma         4 - Bouncing Logo\n");
+	printf("  2 - Cube           5 - Raining Logo\n");
+	printf("\nExamples:\n");
+	printf("  demo -f              # Fullscreen, auto-cycle scenes\n");
+	printf("  demo -s 2            # 2x window size (1600x1200)\n");
+	printf("  demo -w 1920x1080    # Custom window size\n");
+	printf("  demo -d 30 2 6       # Show cube & star ball, 30s each\n");
+	printf("  demo -t /mnt/scroll.txt  # Custom scroll text\n");
+
+	return rc;
+}
+
 int main(int argc, char *argv[])
 {
+	/* Window/display settings */
+	int fullscreen = 0;
+	int window_width = 0;   /* 0 = auto-detect */
+	int window_height = 0;
+	int scale_factor = 1;
+	int auto_resolution = 1;  /* Auto-detect and adapt resolution */
+	const char *scroll_file_path = NULL;
+	int scene_list[6];
+	int num_scenes = 0;
+	int scene_duration = 15000;  /* Default: 15 seconds per scene */
+
+	/* Default scroll text */
+	const char *default_text = "Infix OS - The Container demo"
+		"    *** Greetings to the demoscene <3"
+		"    *** API first: NETCONF + RESTCONF"
+		"    *** Say Hi to our mascot, Jack! :-)"
+		"    *** YANG is the real HERO tho ..."
+		"    *** Sponsored by Wires in Westeros"
+		"    *** From idea to production - we've got you!"
+		"    *** Visit us at https://wires.se"
+		"                                *** ";
+
+	/* Parse command-line arguments */
+
+	static struct option long_options[] = {
+		{"help",       no_argument,       NULL, 'h'},
+		{"duration",   required_argument, NULL, 'd'},
+		{"fullscreen", no_argument,       NULL, 'f'},
+		{"window",     required_argument, NULL, 'w'},
+		{"scale",      required_argument, NULL, 's'},
+		{"text",       required_argument, NULL, 't'},
+		{NULL,         0,                 NULL, 0}
+	};
+
+	int opt;
+	while ((opt = getopt_long(argc, argv, "hd:fw:s:t:", long_options, NULL)) != -1) {
+		switch (opt) {
+		case 'h':
+			return usage(0);
+
+		case 'd':
+			{
+				int duration_sec = atoi(optarg);
+				if (duration_sec > 0) {
+					scene_duration = duration_sec * 1000;
+				} else {
+					fprintf(stderr, "Error: Invalid duration '%s'. Must be positive.\n", optarg);
+					return 1;
+				}
+			}
+			break;
+
+		case 'f':
+			fullscreen = 1;
+			break;
+
+		case 'w':
+			if (sscanf(optarg, "%dx%d", &window_width, &window_height) != 2) {
+				fprintf(stderr, "Error: Invalid window size '%s'. Use format WxH (e.g., 1920x1080)\n", optarg);
+				return 1;
+			}
+			/* Adapt render resolution to match aspect ratio */
+			{
+				float aspect = (float)window_width / window_height;
+				WIDTH = 800;
+				HEIGHT = (int)(800.0f / aspect);
+				auto_resolution = 0;  /* Manual window size disables auto-detection */
+			}
+			break;
+
+		case 's':
+			scale_factor = atoi(optarg);
+			if (scale_factor < 1) {
+				fprintf(stderr, "Error: Invalid scale factor '%s'. Must be >= 1\n", optarg);
+				return 1;
+			}
+			window_width = WIDTH * scale_factor;
+			window_height = HEIGHT * scale_factor;
+			break;
+
+		case 't':
+			scroll_file_path = optarg;
+			break;
+
+		default:
+			return usage(1);
+		}
+	}
+
+	/* Parse non-option arguments as scene numbers */
+	for (int i = optind; i < argc; i++) {
+		int scene = atoi(argv[i]);
+		if (scene >= 0 && scene <= 6) {
+			if (num_scenes < 7) {
+				scene_list[num_scenes++] = scene;
+			}
+		} else {
+			fprintf(stderr, "Error: Invalid scene number '%s'. Use 0-6.\n", argv[i]);
+			return 1;
+		}
+	}
+
+	/* Initialize SDL and libraries */
 	if (SDL_Init(SDL_INIT_VIDEO) < 0) {
 		fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
 		return 1;
@@ -1124,127 +1247,32 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
+	/* Initialize demo context */
 	DemoContext ctx = {0};
 	ctx.fixed_scene = -1;  /* -1 means auto-switch scenes */
 	ctx.current_scene_index = 0;
-	int scene_list[6];
-	int num_scenes = 0;
+	ctx.scene_duration = scene_duration;
 
-	/* Window/display settings */
-	int fullscreen = 0;
-	int window_width = 0;   /* 0 = auto-detect */
-	int window_height = 0;
-	int scale_factor = 1;
-	int auto_resolution = 1;  /* Auto-detect and adapt resolution */
+	/* Load scroll text from file or use default */
+	if (scroll_file_path) {
+		FILE *scroll_file = fopen(scroll_file_path, "r");
+		if (scroll_file) {
+			fseek(scroll_file, 0, SEEK_END);
+			long file_size = ftell(scroll_file);
+			fseek(scroll_file, 0, SEEK_SET);
 
-	/* Parse command-line arguments */
-	ctx.scene_duration = 15000;  /* Default: 15 seconds per scene */
-
-	for (int i = 1; i < argc; i++) {
-		if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
-			printf("Usage: %s [OPTIONS] [SCENE...]\n", argv[0]);
-			printf("\nOptions:\n");
-			printf("  -h, --help         Show this help message\n");
-			printf("  -d, --duration SEC Set scene duration in seconds (default: 15)\n");
-			printf("  -f, --fullscreen   Run in fullscreen mode\n");
-			printf("  -w, --window WxH   Set window size (e.g., 1920x1080)\n");
-			printf("  -s, --scale N      Integer scaling factor (e.g., 2 = 1600x1200)\n");
-			printf("\nScenes:\n");
-			printf("  0 - Starfield\n");
-			printf("  1 - Plasma\n");
-			printf("  2 - Cube\n");
-			printf("  3 - Tunnel\n");
-			printf("  4 - Bouncing Logo (hidden - manual only)\n");
-			printf("  5 - Raining Logo\n");
-			printf("  6 - 3D Star Ball\n");
-			printf("\nExamples:\n");
-			printf("  %s           # Auto-cycle through scenes 0-3, 5-6\n", argv[0]);
-			printf("  %s 2         # Show only cube scene\n", argv[0]);
-			printf("  %s 1 3 5 6   # Cycle between plasma, tunnel, raining logo, and star ball\n", argv[0]);
-			printf("  %s -d 30     # Auto-cycle with 30 second scenes\n", argv[0]);
-			printf("  %s -d 10 2 6 # Cycle cube and star ball, 10 sec each\n", argv[0]);
-			IMG_Quit();
-			TTF_Quit();
-			SDL_Quit();
-			return 0;
+			ctx.scroll_text = malloc(file_size + 1);
+			if (ctx.scroll_text) {
+				size_t read_bytes = fread(ctx.scroll_text, 1, file_size, scroll_file);
+				ctx.scroll_text[read_bytes] = '\0';
+			}
+			fclose(scroll_file);
+		} else {
+			fprintf(stderr, "Warning: Could not open '%s', using default text\n", scroll_file_path);
+			ctx.scroll_text = strdup(default_text);
 		}
-		else if (strcmp(argv[i], "-d") == 0 || strcmp(argv[i], "--duration") == 0) {
-			if (i + 1 >= argc) {
-				fprintf(stderr, "Error: %s requires an argument\n", argv[i]);
-				IMG_Quit();
-				TTF_Quit();
-				SDL_Quit();
-				return 1;
-			}
-			int duration_sec = atoi(argv[++i]);
-			if (duration_sec > 0) {
-				ctx.scene_duration = duration_sec * 1000;
-			} else {
-				fprintf(stderr, "Error: Invalid duration '%s'. Must be positive.\n", argv[i]);
-				IMG_Quit();
-				TTF_Quit();
-				SDL_Quit();
-				return 1;
-			}
-		}
-		else if (strcmp(argv[i], "-f") == 0 || strcmp(argv[i], "--fullscreen") == 0) {
-			fullscreen = 1;
-		}
-		else if (strcmp(argv[i], "-w") == 0 || strcmp(argv[i], "--window") == 0) {
-			if (i + 1 >= argc) {
-				fprintf(stderr, "Error: %s requires an argument\n", argv[i]);
-				IMG_Quit();
-				TTF_Quit();
-				SDL_Quit();
-				return 1;
-			}
-			if (sscanf(argv[++i], "%dx%d", &window_width, &window_height) != 2) {
-				fprintf(stderr, "Error: Invalid window size '%s'. Use format WxH (e.g., 1920x1080)\n", argv[i]);
-				IMG_Quit();
-				TTF_Quit();
-				SDL_Quit();
-				return 1;
-			}
-			/* Adapt render resolution to match aspect ratio */
-			float aspect = (float)window_width / window_height;
-			WIDTH = 800;
-			HEIGHT = (int)(800.0f / aspect);
-			auto_resolution = 0;  /* Manual window size disables auto-detection */
-		}
-		else if (strcmp(argv[i], "-s") == 0 || strcmp(argv[i], "--scale") == 0) {
-			if (i + 1 >= argc) {
-				fprintf(stderr, "Error: %s requires an argument\n", argv[i]);
-				IMG_Quit();
-				TTF_Quit();
-				SDL_Quit();
-				return 1;
-			}
-			scale_factor = atoi(argv[++i]);
-			if (scale_factor < 1) {
-				fprintf(stderr, "Error: Invalid scale factor '%s'. Must be >= 1\n", argv[i]);
-				IMG_Quit();
-				TTF_Quit();
-				SDL_Quit();
-				return 1;
-			}
-			window_width = WIDTH * scale_factor;
-			window_height = HEIGHT * scale_factor;
-		}
-		else {
-			/* Non-option argument - treat as scene number */
-			int scene = atoi(argv[i]);
-			if (scene >= 0 && scene <= 6) {
-				if (num_scenes < 7) {
-					scene_list[num_scenes++] = scene;
-				}
-			} else {
-				fprintf(stderr, "Error: Invalid scene number '%s'. Use 0-6.\n", argv[i]);
-				IMG_Quit();
-				TTF_Quit();
-				SDL_Quit();
-				return 1;
-			}
-		}
+	} else {
+		ctx.scroll_text = strdup(default_text);
 	}
 
 	/* Handle scene selection */
@@ -1568,6 +1596,7 @@ int main(int argc, char *argv[])
 	}
 
 	free(ctx.pixels);
+	free(ctx.scroll_text);
 	if (ctx.jack_surface) {
 		SDL_FreeSurface(ctx.jack_surface);
 	}
