@@ -7,10 +7,11 @@ oldschool aesthetics.
 
 The demo cycles through different scenes.
 
-**Starfield** — 3D scrolling stars with sine wave text scroller  
-**Plasma** — Colorful plasma effect with sine wave text scroller  
-**Rotating Cube** — Texture-mapped 3D cube with copper bars background and traditional bottom scroller  
+**Starfield** — 3D scrolling stars with sine wave text scroller
+**Plasma** — Colorful plasma effect with sine wave text scroller
+**Rotating Cube** — Texture-mapped 3D cube with copper bars background and traditional bottom scroller
 **Tunnel** — Psychedelic tunnel effect with traditional bottom scroller
+**Bouncing Logo** — Animated logo with bouncing physics and rotation effects
 
 ## Dependencies
 
@@ -46,6 +47,7 @@ Or run a specific scene:
 
 ```
 ./demo 2  # Run only the cube scene
+./demo 4  # Run only the bouncing logo scene
 ```
 
 ## Distribution

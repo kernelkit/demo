@@ -16,6 +16,7 @@
 /* Embedded font, image, and music data */
 #include "font_data.h"
 #include "image_data.h"
+#include "logo_data.h"
 
 /* Music data will be included when available */
 #ifdef HAVE_MUSIC
@@ -46,6 +47,8 @@ typedef struct {
     TTF_Font *font;
     SDL_Surface *jack_surface;
     SDL_Texture *jack_texture;
+    SDL_Surface *logo_surface;
+    SDL_Texture *logo_texture;
     int current_scene;
     int fixed_scene;
     float time;
@@ -415,6 +418,95 @@ void render_tunnel(DemoContext *ctx) {
     }
 }
 
+/* Bouncing logo effect with squash and stretch */
+void render_bouncing_logo(DemoContext *ctx) {
+    static float squash_x = 1.0f;  /* Horizontal scale factor */
+    static float squash_y = 1.0f;  /* Vertical scale factor */
+    static float prev_x = -1.0f;   /* Previous x position */
+    static float prev_y = -1.0f;   /* Previous y position */
+
+    /* Clear to dark blue background */
+    for (int i = 0; i < WIDTH * HEIGHT; i++) {
+        ctx->pixels[i] = 0xFF001020;
+    }
+
+    if (!ctx->logo_texture) {
+        SDL_UpdateTexture(ctx->texture, NULL, ctx->pixels, WIDTH * sizeof(Uint32));
+        SDL_RenderClear(ctx->renderer);
+        SDL_RenderCopy(ctx->renderer, ctx->texture, NULL, NULL);
+        return;
+    }
+
+    /* Get logo dimensions */
+    int logo_w, logo_h;
+    SDL_QueryTexture(ctx->logo_texture, NULL, NULL, &logo_w, &logo_h);
+
+    /* Bouncing physics with sine waves for smooth motion */
+    float t = ctx->time;
+    float bounce_x = sin(t * 0.8) * (WIDTH - logo_w) / 2 + (WIDTH - logo_w) / 2;
+    float bounce_y = fabs(sin(t * 1.1)) * (HEIGHT - logo_h - 50) + 25;
+
+    /* Detect edge collisions by checking velocity direction changes */
+    float squash_intensity = 0.1f;  /* How much to squash (0.1 = 10% compression) */
+    float recovery_speed = 0.25f;   /* How fast to recover to normal */
+
+    /* Check horizontal collision (left/right edges) */
+    /*if (prev_x >= 0) {
+        float dx = bounce_x - prev_x;
+        // Detect direction change = wall hit
+        if ((prev_x <= 5 && dx > 0) || (prev_x >= WIDTH - logo_w - 5 && dx < 0)) {
+            squash_x = 1.0f - squash_intensity;  // Squash horizontally
+            squash_y = 1.0f + squash_intensity;  // Stretch vertically
+        }
+    }*/
+
+    /* Check vertical collision (top/bottom edges) */
+    if (prev_y >= 0) {
+        float dy = bounce_y - prev_y;
+        /* Detect direction change = floor/ceiling hit */
+        if ((prev_y <= 30 && dy > 0) || (prev_y >= HEIGHT - logo_h - 30 && dy < 0)) {
+            squash_y = 1.0f - squash_intensity;  /* Squash vertically */
+            squash_x = 1.0f + squash_intensity;  /* Stretch horizontally */
+        }
+    }
+
+    /* Smoothly recover to normal scale */
+    squash_x += (1.0f - squash_x) * recovery_speed;
+    squash_y += (1.0f - squash_y) * recovery_speed;
+
+    /* Clamp to prevent overshoot */
+    if (fabs(squash_x - 1.0f) < 0.01f) squash_x = 1.0f;
+    if (fabs(squash_y - 1.0f) < 0.01f) squash_y = 1.0f;
+
+    /* Store position for next frame */
+    prev_x = bounce_x;
+    prev_y = bounce_y;
+
+    /* Add some gentle rotation */
+    float rotation = sin(t * 0.5) * 8.0;  /* ±8 degrees */
+
+    /* Apply squash and stretch to dimensions */
+    int scaled_w = (int)(logo_w * squash_x);
+    int scaled_h = (int)(logo_h * squash_y);
+
+    /* Center the scaled logo at the bounce position */
+    SDL_Rect dest_rect = {
+        (int)(bounce_x + (logo_w - scaled_w) / 2),
+        (int)(bounce_y + (logo_h - scaled_h) / 2),
+        scaled_w,
+        scaled_h
+    };
+
+    /* Update background texture */
+    SDL_UpdateTexture(ctx->texture, NULL, ctx->pixels, WIDTH * sizeof(Uint32));
+    SDL_RenderClear(ctx->renderer);
+    SDL_RenderCopy(ctx->renderer, ctx->texture, NULL, NULL);
+
+    /* Render the rotating, squashing logo */
+    SDL_RenderCopyEx(ctx->renderer, ctx->logo_texture, NULL, &dest_rect,
+                     rotation, NULL, SDL_FLIP_NONE);
+}
+
 /* Scroll text rendering with different styles */
 void render_scroll_text(DemoContext *ctx) {
     const char *text = "    INFIX - CONTAINER DEMO"
@@ -594,10 +686,11 @@ int main(int argc, char *argv[]) {
         if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0) {
             printf("Usage: %s [scene]\n", argv[0]);
             printf("Scenes:\n");
-            printf("  0 - Plasma\n");
-            printf("  1 - Scroller\n");
+            printf("  0 - Starfield\n");
+            printf("  1 - Plasma\n");
             printf("  2 - Cube\n");
             printf("  3 - Tunnel\n");
+            printf("  4 - Bouncing Logo\n");
             printf("\nIf no scene is specified, auto-switches between all scenes.\n");
             IMG_Quit();
             TTF_Quit();
@@ -605,11 +698,11 @@ int main(int argc, char *argv[]) {
             return 0;
         }
         int scene = atoi(argv[1]);
-        if (scene >= 0 && scene <= 3) {
+        if (scene >= 0 && scene <= 4) {
             ctx.fixed_scene = scene;
             ctx.current_scene = scene;
         } else {
-            fprintf(stderr, "Invalid scene number. Use 0-3.\n");
+            fprintf(stderr, "Invalid scene number. Use 0-4.\n");
             IMG_Quit();
             TTF_Quit();
             SDL_Quit();
@@ -696,6 +789,26 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    /* Load embedded logo.png from memory */
+    SDL_RWops *logo_rw = SDL_RWFromConstMem(logo_png, logo_png_len);
+    if (!logo_rw) {
+        fprintf(stderr, "Warning: Failed to create RWops for logo: %s\n", SDL_GetError());
+        fprintf(stderr, "Bouncing logo scene will not render.\n");
+        ctx.logo_texture = NULL;
+        ctx.logo_surface = NULL;
+    } else {
+        ctx.logo_surface = IMG_Load_RW(logo_rw, 1);  /* 1 = automatically close RW */
+        if (!ctx.logo_surface) {
+            fprintf(stderr, "Warning: Failed to load embedded logo: %s\n", IMG_GetError());
+            fprintf(stderr, "Bouncing logo scene will not render.\n");
+            ctx.logo_texture = NULL;
+        } else {
+            /* Create and cache the texture */
+            ctx.logo_texture = SDL_CreateTextureFromSurface(ctx.renderer, ctx.logo_surface);
+            SDL_SetTextureBlendMode(ctx.logo_texture, SDL_BLENDMODE_BLEND);
+        }
+    }
+
     /* Initialize starfield */
     for (int i = 0; i < NUM_STARS; i++) {
         ctx.stars[i].x = (rand() % 2000 - 1000) / 10.0f;
@@ -757,7 +870,7 @@ int main(int argc, char *argv[]) {
                 } else if (fade_progress < 2.0f) {
                     /* Switch scene and fade in */
                     if (ctx.fade_alpha < 0.5f) {
-                        ctx.current_scene = (ctx.current_scene + 1) % 4;
+                        ctx.current_scene = (ctx.current_scene + 1) % 5;
                         scene_start = current_time - (Uint32)fade_duration;
                         ctx.time = 0;
                     }
@@ -804,6 +917,11 @@ int main(int argc, char *argv[]) {
                 SDL_RenderCopy(ctx.renderer, ctx.texture, NULL, NULL);
                 render_scroll_text(&ctx);
                 break;
+            case 4:
+                ctx.scroll_style = SCROLL_BOTTOM_TRADITIONAL;
+                render_bouncing_logo(&ctx);
+                render_scroll_text(&ctx);
+                break;
         }
 
         /* Apply fade effect */
@@ -824,6 +942,12 @@ int main(int argc, char *argv[]) {
     }
     if (ctx.jack_texture) {
         SDL_DestroyTexture(ctx.jack_texture);
+    }
+    if (ctx.logo_surface) {
+        SDL_FreeSurface(ctx.logo_surface);
+    }
+    if (ctx.logo_texture) {
+        SDL_DestroyTexture(ctx.logo_texture);
     }
     if (ctx.plasma_texture) {
         SDL_DestroyTexture(ctx.plasma_texture);
