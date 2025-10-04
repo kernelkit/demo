@@ -45,14 +45,14 @@ jobs:
                   ./appimagetool.AppImage --appimage-extract 2>/dev/null || unsquashfs -d squashfs-root appimagetool.AppImage && \
                   mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/256x256/apps && \
                   cp demo AppDir/usr/bin/ && \
-                  cat > AppDir/usr/share/applications/demo.desktop <<EOF
-[Desktop Entry]
-Type=Application
-Name=Infix Demo
-Exec=usr/bin/demo
-Icon=demo
-Categories=Game;
-EOF
+                  cat <<EOF > AppDir/usr/share/applications/demo.desktop
+                  [Desktop Entry]
+                  Type=Application
+                  Name=Infix Demo
+                  Exec=usr/bin/demo
+                  Icon=demo
+                  Categories=Game;
+                  EOF
                   cp jack.png AppDir/usr/share/icons/hicolor/256x256/apps/demo.png && \
                   ln -sf usr/share/applications/demo.desktop AppDir/demo.desktop && \
                   ln -sf usr/share/icons/hicolor/256x256/apps/demo.png AppDir/demo.png && \
