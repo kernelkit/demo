@@ -55,26 +55,21 @@ void render_plasma(DemoContext *ctx) {
     #define PLASMA_W 400
     #define PLASMA_H 300
 
-    float t = ctx->time * 0.8;
+    /* Use global_time so plasma doesn't reset every scene */
+    float t = ctx->global_time * 0.8;
 
     /* Add drift to the plasma with slow-moving offsets */
-    float drift_x = sin(ctx->time * 0.15) * 50.0;
-    float drift_y = cos(ctx->time * 0.2) * 40.0;
+    float drift_x = sin(ctx->global_time * 0.15) * 50.0;
+    float drift_y = cos(ctx->global_time * 0.2) * 40.0;
 
     /* Precompute sine LUTs for this frame */
     static float sinx[PLASMA_W * 2];
     static float siny[PLASMA_H * 2];
-    static float color_lut[512];
 
     for (int i = 0; i < PLASMA_W * 2; i++)
         sinx[i] = sin(i * 0.02 + t);
     for (int j = 0; j < PLASMA_H * 2; j++)
         siny[j] = sin(j * 0.02 + t);
-
-    /* Precompute color sine values */
-    for (int i = 0; i < 512; i++) {
-        color_lut[i] = sin(i * 0.05);
-    }
 
     /* Lock plasma texture for direct pixel access */
     Uint32 *pixels;
@@ -91,20 +86,19 @@ void render_plasma(DemoContext *ctx) {
             fx = (fx < 0) ? 0 : ((fx >= PLASMA_W * 2) ? PLASMA_W * 2 - 1 : fx);
             fy = (fy < 0) ? 0 : ((fy >= PLASMA_H * 2) ? PLASMA_H * 2 - 1 : fy);
 
-            /* Use LUT and approximate radial term */
+            /* Use LUT and radial term with proper distance */
             int dx = x - PLASMA_W / 2;
             int dy = y - PLASMA_H / 2;
-            float dist_approx = (abs(dx) + abs(dy)) * 0.7071f;
+            float dist = sqrtf(dx * dx + dy * dy);
 
             float v = sinx[fx] + siny[fy] +
                      sinx[(fx + fy) % (PLASMA_W * 2)] +
-                     sin(dist_approx * 0.02 + t * 1.2);
+                     sin(dist * 0.02 + t * 1.2);
 
-            /* Use color LUT for RGB calculations */
-            int idx = ((int)((v + 4.0f) * 20.0f)) & 511;
-            int r = (int)(128 + 127 * color_lut[idx]);
-            int g = (int)(128 + 127 * color_lut[(idx + 171) & 511]);
-            int b = (int)(128 + 127 * color_lut[(idx + 341) & 511]);
+            /* Direct color calculation (simpler and more accurate) */
+            int r = (int)(128 + 127 * sin(v * PI));
+            int g = (int)(128 + 127 * sin(v * PI + 2 * PI / 3));
+            int b = (int)(128 + 127 * sin(v * PI + 4 * PI / 3));
 
             pixels[y * stride + x] = 0xFF000000 | (r << 16) | (g << 8) | b;
         }
