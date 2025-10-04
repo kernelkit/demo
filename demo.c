@@ -904,18 +904,18 @@ void render_raining_logo(DemoContext *ctx)
 /* Scroll text rendering with different styles */
 void render_scroll_text(DemoContext *ctx)
 {
-	const char *text = " Infix OS  <>  The Container demo <>"
+	const char *text = "Infix OS - The Container demo"
 		"    *** Greetings to the demoscene <3"
-		"    *** NETCONF and RESTCONF APIs"
-		"    *** SAY HI TO JACK! :-)      "
+		"    *** API first: NETCONF + RESTCONF"
+		"    *** Say Hi to our mascot, Jack! :-)"
 		"    *** YANG is the real HERO tho ..."
-		"    *** Sponsored by Wires in Westeros ***"
-		"    "
-		    ;
+		"    *** Sponsored by Wires in Westeros"
+		"    *** From idea to production - we've got you!"
+		"    *** Visit us at https://wires.se"
+		"                                *** ";
 
-	if (ctx->scroll_style == SCROLL_NONE) {
+	if (ctx->scroll_style == SCROLL_NONE)
 		return;
-	}
 
 	int text_len = strlen(text);
 	float scroll_speed = 180.0;
