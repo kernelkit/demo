@@ -7,6 +7,8 @@ RUN apk add --no-cache \
     sdl2_ttf-dev \
     sdl2_image \
     sdl2_image-dev \
+    sdl2_mixer \
+    sdl2_mixer-dev \
     gcc \
     musl-dev \
     make \
@@ -14,7 +16,7 @@ RUN apk add --no-cache \
 
 WORKDIR /app
 
-COPY demo.c Makefile topaz-8.otf jack.png ./
+COPY demo.c Makefile topaz-8.otf jack.png music.mod* ./
 
 RUN make
 

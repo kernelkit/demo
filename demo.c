@@ -8,13 +8,19 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
 #include <SDL2/SDL_image.h>
+#include <SDL2/SDL_mixer.h>
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
 
-/* Embedded font and image data */
+/* Embedded font, image, and music data */
 #include "font_data.h"
 #include "image_data.h"
+
+/* Music data will be included when available */
+#ifdef HAVE_MUSIC
+#include "music_data.h"
+#endif
 
 #define WIDTH 800
 #define HEIGHT 600
@@ -567,6 +573,15 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    /* Initialize SDL_mixer for music */
+    if (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 2048) < 0) {
+        fprintf(stderr, "Mix_OpenAudio failed: %s\n", Mix_GetError());
+        IMG_Quit();
+        TTF_Quit();
+        SDL_Quit();
+        return 1;
+    }
+
     DemoContext ctx = {0};
     ctx.fixed_scene = -1;  /* -1 means auto-switch scenes */
 
@@ -684,6 +699,20 @@ int main(int argc, char *argv[]) {
         ctx.stars[i].z = (rand() % 10000) / 100.0f;
     }
 
+    /* Load and play music from embedded data */
+#ifdef HAVE_MUSIC
+    SDL_RWops *music_rw = SDL_RWFromConstMem(music_mod, music_mod_len);
+    if (music_rw) {
+        Mix_Music *music = Mix_LoadMUS_RW(music_rw, 1);  /* 1 = auto-free RW */
+        if (music) {
+            Mix_PlayMusic(music, -1);  /* -1 = loop forever */
+            Mix_VolumeMusic(MIX_MAX_VOLUME / 2);  /* 50% volume */
+        } else {
+            fprintf(stderr, "Warning: Failed to load music: %s\n", Mix_GetError());
+        }
+    }
+#endif
+
     int running = 1;
     Uint32 start_time = SDL_GetTicks();
     Uint32 scene_start = start_time;
@@ -798,6 +827,7 @@ int main(int argc, char *argv[]) {
     SDL_DestroyTexture(ctx.texture);
     SDL_DestroyRenderer(ctx.renderer);
     SDL_DestroyWindow(ctx.window);
+    Mix_CloseAudio();
     IMG_Quit();
     TTF_Quit();
     SDL_Quit();
