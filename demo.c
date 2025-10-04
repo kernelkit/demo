@@ -15,12 +15,17 @@
 #define WIDTH 800
 #define HEIGHT 600
 #define PI 3.14159265358979323846
+#define NUM_STARS 200
 
 typedef enum {
     SCROLL_NONE,
     SCROLL_SINE_WAVE,
     SCROLL_BOTTOM_TRADITIONAL
 } ScrollStyle;
+
+typedef struct {
+    float x, y, z;
+} Star;
 
 typedef struct {
     SDL_Window *window;
@@ -38,6 +43,7 @@ typedef struct {
     float fade_alpha;
     int fading;
     ScrollStyle scroll_style;
+    Star stars[NUM_STARS];
 } DemoContext;
 
 /* Plasma effect - optimized with lower resolution and LUT */
@@ -103,6 +109,57 @@ void render_plasma(DemoContext *ctx) {
     SDL_UnlockTexture(ctx->plasma_texture);
 }
 
+/* Starfield effect */
+void render_starfield(DemoContext *ctx) {
+    /* Clear to black */
+    for (int i = 0; i < WIDTH * HEIGHT; i++) {
+        ctx->pixels[i] = 0xFF000000;
+    }
+
+    /* Update and render stars */
+    float speed = 100.0f;
+    for (int i = 0; i < NUM_STARS; i++) {
+        /* Move star towards camera */
+        ctx->stars[i].z -= speed * 0.016f;
+
+        /* Reset star if it passes the camera */
+        if (ctx->stars[i].z <= 0) {
+            ctx->stars[i].x = (rand() % 2000 - 1000) / 10.0f;
+            ctx->stars[i].y = (rand() % 2000 - 1000) / 10.0f;
+            ctx->stars[i].z = 100.0f;
+        }
+
+        /* Project 3D to 2D */
+        float k = 128.0f / ctx->stars[i].z;
+        int sx = WIDTH / 2 + (int)(ctx->stars[i].x * k);
+        int sy = HEIGHT / 2 + (int)(ctx->stars[i].y * k);
+
+        /* Calculate brightness based on distance */
+        int brightness = (int)(255 * (1.0f - ctx->stars[i].z / 100.0f));
+        if (brightness < 0) brightness = 0;
+        if (brightness > 255) brightness = 255;
+
+        /* Draw star */
+        if (sx >= 0 && sx < WIDTH && sy >= 0 && sy < HEIGHT) {
+            Uint32 color = 0xFF000000 | (brightness << 16) | (brightness << 8) | brightness;
+            ctx->pixels[sy * WIDTH + sx] = color;
+
+            /* Draw larger stars for closer ones */
+            if (ctx->stars[i].z < 20.0f && sx > 0 && sy > 0 && sx < WIDTH - 1 && sy < HEIGHT - 1) {
+                ctx->pixels[sy * WIDTH + sx - 1] = color;
+                ctx->pixels[sy * WIDTH + sx + 1] = color;
+                ctx->pixels[(sy - 1) * WIDTH + sx] = color;
+                ctx->pixels[(sy + 1) * WIDTH + sx] = color;
+            }
+        }
+    }
+
+    /* Update texture */
+    SDL_UpdateTexture(ctx->texture, NULL, ctx->pixels, WIDTH * sizeof(Uint32));
+    SDL_RenderClear(ctx->renderer);
+    SDL_RenderCopy(ctx->renderer, ctx->texture, NULL, NULL);
+}
+
 /* Text scroller with SDL_ttf */
 void render_scroller(DemoContext *ctx) {
     /* Clear to dark background */
@@ -128,14 +185,59 @@ Uint32 get_jack_pixel(SDL_Surface *surface, int x, int y) {
     return pixels[y * surface->w + x];
 }
 
-/* Rotating cube with texture mapped faces */
+/* Rotating cube with texture mapped faces and copper bars */
 void render_cube(DemoContext *ctx) {
-    /* Clear with gradient background */
-    for (int y = 0; y < HEIGHT; y++) {
-        int shade = y * 64 / HEIGHT;
-        Uint32 color = 0xFF000000 | (shade << 16) | (shade << 8) | (shade * 2);
-        for (int x = 0; x < WIDTH; x++) {
-            ctx->pixels[y * WIDTH + x] = color;
+    /* Clear to black first */
+    for (int i = 0; i < WIDTH * HEIGHT; i++) {
+        ctx->pixels[i] = 0xFF000000;
+    }
+
+    /* Render copper bars */
+    float t = ctx->time;
+    int num_bars = 8;
+    for (int i = 0; i < num_bars; i++) {
+        /* Calculate bar position with sine wave motion */
+        float base_y = (i * HEIGHT / num_bars) + sin(t * 1.5 + i * 0.8) * 40.0;
+        int bar_height = 30;
+
+        /* HSV to RGB for rainbow effect */
+        float hue = (i / (float)num_bars + t * 0.1);
+        hue = hue - floor(hue);  /* Keep in 0-1 range */
+
+        int h_section = (int)(hue * 6);
+        float f = hue * 6 - h_section;
+        int v = 255;
+        int p = 0;
+        int q = (int)(v * (1 - f));
+        int t_val = (int)(v * f);
+
+        int r, g, b;
+        switch (h_section % 6) {
+            case 0: r = v; g = t_val; b = p; break;
+            case 1: r = q; g = v; b = p; break;
+            case 2: r = p; g = v; b = t_val; break;
+            case 3: r = p; g = q; b = v; break;
+            case 4: r = t_val; g = p; b = v; break;
+            default: r = v; g = p; b = q; break;
+        }
+
+        /* Draw bar with gradient */
+        for (int dy = 0; dy < bar_height; dy++) {
+            int y = (int)base_y + dy;
+            if (y >= 0 && y < HEIGHT) {
+                /* Gradient brightness based on position in bar */
+                float brightness = 1.0f - fabsf(dy - bar_height / 2.0f) / (bar_height / 2.0f);
+                brightness = brightness * brightness;  /* Squared for sharper falloff */
+
+                int br = (int)(r * brightness);
+                int bg = (int)(g * brightness);
+                int bb = (int)(b * brightness);
+
+                Uint32 color = 0xFF000000 | (br << 16) | (bg << 8) | bb;
+                for (int x = 0; x < WIDTH; x++) {
+                    ctx->pixels[y * WIDTH + x] = color;
+                }
+            }
         }
     }
 
@@ -518,16 +620,10 @@ int main(int argc, char *argv[]) {
                                     SDL_TEXTUREACCESS_STREAMING,
                                     WIDTH, HEIGHT);
     
-    /* Load font - try common paths */
-    ctx.font = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 48);
+    /* Load local Topaz-8 font */
+    ctx.font = TTF_OpenFont("topaz-8.otf", 48);
     if (!ctx.font) {
-        ctx.font = TTF_OpenFont("/usr/share/fonts/TTF/DejaVuSans-Bold.ttf", 48);
-    }
-    if (!ctx.font) {
-        ctx.font = TTF_OpenFont("/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf", 48);
-    }
-    if (!ctx.font) {
-        fprintf(stderr, "Failed to load font: %s\n", TTF_GetError());
+        fprintf(stderr, "Failed to load topaz-8.otf: %s\n", TTF_GetError());
         SDL_DestroyTexture(ctx.texture);
         SDL_DestroyRenderer(ctx.renderer);
         SDL_DestroyWindow(ctx.window);
@@ -562,6 +658,13 @@ int main(int argc, char *argv[]) {
         ctx.jack_texture = SDL_CreateTextureFromSurface(ctx.renderer, ctx.jack_surface);
         SDL_SetTextureBlendMode(ctx.jack_texture, SDL_BLENDMODE_NONE);
         SDL_SetTextureAlphaMod(ctx.jack_texture, 255);
+    }
+
+    /* Initialize starfield */
+    for (int i = 0; i < NUM_STARS; i++) {
+        ctx.stars[i].x = (rand() % 2000 - 1000) / 10.0f;
+        ctx.stars[i].y = (rand() % 2000 - 1000) / 10.0f;
+        ctx.stars[i].z = (rand() % 10000) / 100.0f;
     }
 
     int running = 1;
@@ -630,7 +733,8 @@ int main(int argc, char *argv[]) {
         /* Render current scene */
         switch (ctx.current_scene) {
             case 0:
-                render_scroller(&ctx);
+                ctx.scroll_style = SCROLL_SINE_WAVE;
+                render_starfield(&ctx);
                 render_scroll_text(&ctx);
                 break;
             case 1:
