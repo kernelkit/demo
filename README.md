@@ -44,11 +44,29 @@ The build system will automatically detect and embed the music file.
 make run
 ```
 
-Or run a specific scene:
+### Command-Line Options
 
 ```
-./demo 2  # Run only the cube scene
-./demo 4  # Run only the bouncing logo scene
+Usage: ./demo [OPTIONS] [SCENE...]
+
+Options:
+  -h, --help        Show help message
+  -d, --duration SEC Set scene duration in seconds (default: 15)
+
+Scenes:
+  0 - Starfield
+  1 - Plasma
+  2 - Cube
+  3 - Tunnel
+  4 - Bouncing Logo (hidden - manual only)
+  5 - Raining Logo
+
+Examples:
+  ./demo              # Auto-cycle through scenes 0-3 and 5
+  ./demo 2            # Show only cube scene
+  ./demo 1 3 5        # Cycle between plasma, tunnel, and raining logo
+  ./demo -d 30        # Auto-cycle with 30 second scenes
+  ./demo -d 10 2 5    # Cycle cube and raining logo, 10 sec each
 ```
 
 ## Distribution

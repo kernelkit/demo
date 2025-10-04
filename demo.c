@@ -59,6 +59,7 @@ typedef struct {
     SDL_Surface *logo_surface;
     SDL_Texture *logo_texture;
     int current_scene;
+    int current_scene_index;  /* Index into scene_list */
     int fixed_scene;
     float time;
     float global_time;
@@ -67,6 +68,8 @@ typedef struct {
     ScrollStyle scroll_style;
     Star stars[NUM_STARS];
     Uint32 scene_duration;  /* Milliseconds per scene */
+    int scene_list[6];      /* Custom scene order */
+    int num_scenes;         /* Number of scenes in list */
 } DemoContext;
 
 /* Plasma effect - optimized with lower resolution and LUT */
@@ -851,6 +854,7 @@ int main(int argc, char *argv[])
 
 	DemoContext ctx = {0};
 	ctx.fixed_scene = -1;  /* -1 means auto-switch scenes */
+	ctx.current_scene_index = 0;
 	int scene_list[6];
 	int num_scenes = 0;
 
@@ -922,12 +926,25 @@ int main(int argc, char *argv[])
 		/* Single scene - fix to that scene */
 		ctx.fixed_scene = scene_list[0];
 		ctx.current_scene = scene_list[0];
+		ctx.num_scenes = 0;  /* Fixed scene, no list */
 	} else if (num_scenes > 1) {
-		/* Multiple scenes specified - use first as starting point */
-		ctx.current_scene = scene_list[0];
-		/* TODO: Implement custom scene cycling through scene_list */
-		fprintf(stderr, "Note: Multiple scene cycling not yet implemented, using first scene only\n");
-		ctx.fixed_scene = scene_list[0];
+		/* Multiple scenes specified - cycle through custom list */
+		for (int i = 0; i < num_scenes; i++) {
+			ctx.scene_list[i] = scene_list[i];
+		}
+		ctx.num_scenes = num_scenes;
+		ctx.current_scene_index = 0;
+		ctx.current_scene = ctx.scene_list[0];
+	} else {
+		/* No scenes specified - use default list (skip scene 4) */
+		ctx.scene_list[0] = 0;
+		ctx.scene_list[1] = 1;
+		ctx.scene_list[2] = 2;
+		ctx.scene_list[3] = 3;
+		ctx.scene_list[4] = 5;
+		ctx.num_scenes = 5;
+		ctx.current_scene_index = 0;
+		ctx.current_scene = ctx.scene_list[0];
 	}
 
 	ctx.window = SDL_CreateWindow("Infix Container Demo",
@@ -1089,10 +1106,10 @@ int main(int argc, char *argv[])
 				} else if (fade_progress < 2.0f) {
 					/* Switch scene and fade in */
 					if (ctx.fade_alpha < 0.5f) {
-						/* Skip scene 4 (bouncing logo - hidden scene) */
-						ctx.current_scene = (ctx.current_scene + 1) % 6;
-						if (ctx.current_scene == 4) {
-							ctx.current_scene = 5;  /* Jump to raining logo instead */
+						/* Advance to next scene in the list */
+						if (ctx.num_scenes > 0) {
+							ctx.current_scene_index = (ctx.current_scene_index + 1) % ctx.num_scenes;
+							ctx.current_scene = ctx.scene_list[ctx.current_scene_index];
 						}
 						scene_start = current_time - (Uint32)fade_duration;
 						ctx.time = 0;
