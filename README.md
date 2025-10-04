@@ -7,11 +7,12 @@ oldschool aesthetics.
 
 The demo cycles through different scenes.
 
-**Starfield** — 3D scrolling stars with sine wave text scroller
-**Plasma** — Colorful plasma effect with sine wave text scroller
-**Rotating Cube** — Texture-mapped 3D cube with copper bars background and traditional bottom scroller
-**Tunnel** — Psychedelic tunnel effect with traditional bottom scroller
-**Bouncing Logo** — Animated logo with bouncing physics and rotation effects
+- **Starfield** — 3D scrolling stars with sine wave text scroller
+- **Plasma** — Colorful plasma effect with sine wave text scroller
+- **Rotating Cube** — Texture-mapped 3D cube with copper bars background
+  and traditional bottom scroller
+- **Tunnel** — Psychedelic tunnel effect with traditional bottom scroller
+- **Bouncing Logo** — Animated logo with bouncing physics and rotation effects
 
 ## Dependencies
 
@@ -60,7 +61,8 @@ Create a portable AppImage that works on most Linux distributions:
 make appimage
 ```
 
-This creates `InfixDemo-x86_64.AppImage` - a single executable file you can share with friends. They just need to:
+This creates `InfixDemo-x86_64.AppImage` - a single executable file you
+can share with friends. They just need to:
 
 1. Download the `.AppImage` file
 2. Make it executable: `chmod +x InfixDemo-x86_64.AppImage`
