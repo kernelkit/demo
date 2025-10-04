@@ -417,8 +417,12 @@ void render_tunnel(DemoContext *ctx) {
 
 /* Scroll text rendering with different styles */
 void render_scroll_text(DemoContext *ctx) {
-    const char *text = "    INFIX - CONTAINER DEMO    *** GREETINGS TO THE DEMOSCENE ***    "
-                       " NETCONF *** RESTCONF *** YANG *** SAY HI TO JACK! ***    ";
+    const char *text = "    INFIX - CONTAINER DEMO"
+	    "    *** GREETINGS TO THE DEMOSCENE"
+	    "    *** NETCONF and RESTCONF APIs"
+	    "    *** SAY HI TO JACK! :-)      "
+	    "    *** YANG is the real HERO tho ..."
+	    ;
 
     if (ctx->scroll_style == SCROLL_NONE) {
         return;
@@ -735,16 +739,17 @@ int main(int argc, char *argv[]) {
         /* Handle scene transitions with fade (only if not fixed) */
         if (ctx.fixed_scene == -1) {
             Uint32 scene_duration = current_time - scene_start;
+            Uint32 scene_display_time = 15000;  /* 15 seconds per scene */
             float fade_duration = 300.0f;  /* 300ms fade */
 
-            if (scene_duration > 10000) {
+            if (scene_duration > scene_display_time) {
                 /* Start fade out */
                 if (!ctx.fading) {
                     ctx.fading = 1;
                     ctx.fade_alpha = 1.0f;
                 }
 
-                float fade_progress = (scene_duration - 10000) / fade_duration;
+                float fade_progress = (scene_duration - scene_display_time) / fade_duration;
 
                 if (fade_progress < 1.0f) {
                     /* Fade out */
