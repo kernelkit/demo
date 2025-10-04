@@ -32,7 +32,8 @@
 typedef enum {
     SCROLL_NONE,
     SCROLL_SINE_WAVE,
-    SCROLL_BOTTOM_TRADITIONAL
+    SCROLL_BOTTOM_TRADITIONAL,
+    SCROLL_ROLLER_3D
 } ScrollStyle;
 
 typedef struct {
@@ -54,6 +55,7 @@ typedef struct {
     SDL_Texture *plasma_texture;
     Uint32 *pixels;
     TTF_Font *font;
+    TTF_Font *font_outline;
     SDL_Surface *jack_surface;
     SDL_Texture *jack_texture;
     SDL_Surface *logo_surface;
@@ -697,10 +699,11 @@ void render_scroll_text(DemoContext *ctx)
 	float scroll_speed = 180.0;
 	float scroll_offset = ctx->global_time * scroll_speed;
 
-	if (ctx->scroll_style == SCROLL_SINE_WAVE) {
+	if (ctx->scroll_style == SCROLL_SINE_WAVE || ctx->scroll_style == SCROLL_ROLLER_3D) {
 		/* Glyph cache with metrics */
 		typedef struct {
 			SDL_Texture *tex;
+			SDL_Texture *tex_outline;
 			int w, h;
 			int adv;
 			int valid;
@@ -737,6 +740,16 @@ void render_scroll_text(DemoContext *ctx)
 					gcache[ch].h = surface->h;
 					gcache[ch].valid = 1;
 					SDL_FreeSurface(surface);
+
+					/* Outline cache for 3D roller */
+					if (ctx->font_outline && ctx->scroll_style == SCROLL_ROLLER_3D) {
+						SDL_Color black = {0, 0, 0, 255};
+						SDL_Surface *os = TTF_RenderText_Blended(ctx->font_outline, buffer, black);
+						if (os) {
+							gcache[ch].tex_outline = SDL_CreateTextureFromSurface(ctx->renderer, os);
+							SDL_FreeSurface(os);
+						}
+					}
 				}
 			}
 
@@ -761,7 +774,8 @@ void render_scroll_text(DemoContext *ctx)
 			while (char_x < -100) char_x += total_adv;
 
 			if (char_x > -100 && char_x < WIDTH + 100 && gcache[ch].valid) {
-				float wave = sin(ctx->global_time * 2.0 + i * 0.3) * 80.0;
+				float phase = ctx->global_time * 2.0f + i * 0.3f;
+				float wave = sinf(phase) * 80.0f;
 				int y_pos = HEIGHT / 2 + (int)wave;
 
 				/* Update color for gradient effect */
@@ -769,10 +783,44 @@ void render_scroll_text(DemoContext *ctx)
 				Uint8 r = (Uint8)(128 + 127 * sin(color_shift * PI / 180));
 				Uint8 g = (Uint8)(128 + 127 * sin((color_shift + 120) * PI / 180));
 				Uint8 b = (Uint8)(128 + 127 * sin((color_shift + 240) * PI / 180));
-				SDL_SetTextureColorMod(gcache[ch].tex, r, g, b);
 
-				SDL_Rect dest = {(int)char_x, y_pos - gcache[ch].h / 2, gcache[ch].w, gcache[ch].h};
-				SDL_RenderCopy(ctx->renderer, gcache[ch].tex, NULL, &dest);
+				if (ctx->scroll_style == SCROLL_ROLLER_3D) {
+					/* 3D roller with scale, outline, and glow */
+					float scale = 1.0f + 0.25f * cosf(phase);
+					int dw = (int)(gcache[ch].w * scale);
+					int dh = (int)(gcache[ch].h * scale);
+					SDL_Rect dest = {(int)char_x, y_pos - dh / 2, dw, dh};
+
+					/* Outline behind */
+					if (gcache[ch].tex_outline) {
+						SDL_SetTextureColorMod(gcache[ch].tex_outline, 0, 0, 0);
+						SDL_Rect od = dest;
+						od.x -= 1;
+						od.y -= 1;
+						SDL_RenderCopy(ctx->renderer, gcache[ch].tex_outline, NULL, &od);
+					}
+
+					/* Main glyph with color */
+					SDL_SetTextureColorMod(gcache[ch].tex, r, g, b);
+					SDL_RenderCopy(ctx->renderer, gcache[ch].tex, NULL, &dest);
+
+					/* Soft glow (additive, slightly larger, low alpha) */
+					SDL_SetTextureBlendMode(gcache[ch].tex, SDL_BLENDMODE_ADD);
+					SDL_SetTextureAlphaMod(gcache[ch].tex, 40);
+					SDL_Rect glow = dest;
+					glow.x -= 2;
+					glow.y -= 2;
+					glow.w += 4;
+					glow.h += 4;
+					SDL_RenderCopy(ctx->renderer, gcache[ch].tex, NULL, &glow);
+					SDL_SetTextureAlphaMod(gcache[ch].tex, 255);
+					SDL_SetTextureBlendMode(gcache[ch].tex, SDL_BLENDMODE_BLEND);
+				} else {
+					/* Simple sine wave */
+					SDL_SetTextureColorMod(gcache[ch].tex, r, g, b);
+					SDL_Rect dest = {(int)char_x, y_pos - gcache[ch].h / 2, gcache[ch].w, gcache[ch].h};
+					SDL_RenderCopy(ctx->renderer, gcache[ch].tex, NULL, &dest);
+				}
 			}
 
 			/* Advance by glyph advance + kerning */
@@ -990,6 +1038,15 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
+	/* Load outline font for 3D roller effect */
+	SDL_RWops *font_outline_rw = SDL_RWFromConstMem(topaz_8_otf, topaz_8_otf_len);
+	if (font_outline_rw) {
+		ctx.font_outline = TTF_OpenFontRW(font_outline_rw, 1, 48);
+		if (ctx.font_outline) {
+			TTF_SetFontOutline(ctx.font_outline, 2);
+		}
+	}
+
 	ctx.pixels = malloc(WIDTH * HEIGHT * sizeof(Uint32));
 
 	/* Create plasma texture (lower resolution for performance) */
@@ -1133,7 +1190,7 @@ int main(int argc, char *argv[])
 		/* Render current scene */
 		switch (ctx.current_scene) {
 		case 0:
-			ctx.scroll_style = SCROLL_SINE_WAVE;
+			ctx.scroll_style = SCROLL_ROLLER_3D;
 			render_starfield(&ctx);
 			render_scroll_text(&ctx);
 			break;
@@ -1198,6 +1255,9 @@ int main(int argc, char *argv[])
 		SDL_DestroyTexture(ctx.plasma_texture);
 	}
 	TTF_CloseFont(ctx.font);
+	if (ctx.font_outline) {
+		TTF_CloseFont(ctx.font_outline);
+	}
 	SDL_DestroyTexture(ctx.texture);
 	SDL_DestroyRenderer(ctx.renderer);
 	SDL_DestroyWindow(ctx.window);
