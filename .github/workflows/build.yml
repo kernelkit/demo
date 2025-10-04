@@ -33,15 +33,31 @@ jobs:
               --entrypoint /bin/bash \
               ubuntu:22.04 -c '
                 apt-get update && \
-                apt-get install -y wget file libsdl2-dev libsdl2-ttf-dev \
+                apt-get install -y wget file libfuse2 libsdl2-dev libsdl2-ttf-dev \
                   libsdl2-image-dev libsdl2-mixer-dev build-essential && \
-                make clean && make && make appimage
+                make clean && make && \
+                ARCH=aarch64 make appimage
               '
           else
             sudo apt-get update
-            sudo apt-get install -y libsdl2-dev libsdl2-ttf-dev \
+            sudo apt-get install -y libfuse2 libsdl2-dev libsdl2-ttf-dev \
               libsdl2-image-dev libsdl2-mixer-dev
-            make clean && make && make appimage
+            make clean && make
+            # Extract and run appimagetool without FUSE
+            make appimage || (
+              wget -q -c https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool &&
+              chmod +x appimagetool &&
+              ./appimagetool --appimage-extract &&
+              mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/256x256/apps &&
+              cp demo AppDir/usr/bin/ &&
+              printf '[Desktop Entry]\nType=Application\nName=Infix Demo\nExec=usr/bin/demo\nIcon=demo\nCategories=Game;\n' > AppDir/usr/share/applications/demo.desktop &&
+              cp jack.png AppDir/usr/share/icons/hicolor/256x256/apps/demo.png &&
+              ln -sf usr/share/applications/demo.desktop AppDir/demo.desktop &&
+              ln -sf usr/share/icons/hicolor/256x256/apps/demo.png AppDir/demo.png &&
+              ln -sf usr/bin/demo AppDir/AppRun &&
+              ARCH=x86_64 squashfs-root/AppRun AppDir InfixDemo-x86_64.AppImage &&
+              rm -rf AppDir squashfs-root appimagetool
+            )
           fi
 
       - name: Rename AppImage
