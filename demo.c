@@ -439,6 +439,228 @@ void render_tunnel(DemoContext *ctx)
 	}
 }
 
+/* 3D star ball that bounces */
+void render_star_ball(DemoContext *ctx)
+{
+	/* Generate sphere vertices using fibonacci sphere */
+	#define NUM_BALL_STARS 200
+	#define NUM_BG_STARS 150
+	static float sphere_points[NUM_BALL_STARS][3];
+	static int initialized = 0;
+	static float ball_x = 400.0f;
+	static float ball_y = 300.0f;
+	static float vel_x = 3.0f;
+	static float vel_y = 2.5f;
+	static float squash_x = 1.0f;
+	static float squash_y = 1.0f;
+
+	/* Parallax background stars (3 layers) */
+	typedef struct {
+		float x, y;
+		int layer;  /* 0=far, 1=mid, 2=near */
+		int brightness;
+	} BgStar;
+	static BgStar bg_stars[NUM_BG_STARS];
+	static int bg_initialized = 0;
+
+	if (!initialized) {
+		/* Generate points on sphere using fibonacci spiral */
+		float phi = (1.0f + sqrtf(5.0f)) / 2.0f;  /* Golden ratio */
+		for (int i = 0; i < NUM_BALL_STARS; i++) {
+			float t = (float)i / NUM_BALL_STARS;
+			float inc = acosf(1.0f - 2.0f * t);
+			float azi = 2.0f * PI * i / phi;
+
+			sphere_points[i][0] = sinf(inc) * cosf(azi);
+			sphere_points[i][1] = sinf(inc) * sinf(azi);
+			sphere_points[i][2] = cosf(inc);
+		}
+		initialized = 1;
+	}
+
+	if (!bg_initialized) {
+		/* Initialize background stars with random positions */
+		for (int i = 0; i < NUM_BG_STARS; i++) {
+			bg_stars[i].x = (float)(rand() % WIDTH);
+			bg_stars[i].y = (float)(rand() % HEIGHT);
+			bg_stars[i].layer = i % 3;  /* Distribute across 3 layers */
+			/* Fainter stars for farther layers */
+			bg_stars[i].brightness = (bg_stars[i].layer == 0) ? 40 :
+			                         (bg_stars[i].layer == 1) ? 60 : 80;
+		}
+		bg_initialized = 1;
+	}
+
+	/* Clear to black */
+	for (int i = 0; i < WIDTH * HEIGHT; i++) {
+		ctx->pixels[i] = 0xFF000000;
+	}
+
+	/* Render and update parallax background stars (scrolling opposite to text) */
+	float scroll_speed = 180.0f;  /* Match text scroll speed */
+	for (int i = 0; i < NUM_BG_STARS; i++) {
+		/* Different speeds per layer for parallax effect */
+		float layer_speed = (bg_stars[i].layer == 0) ? 0.2f :
+		                    (bg_stars[i].layer == 1) ? 0.4f : 0.6f;
+
+		/* Scroll left (opposite of text which scrolls left to right when viewing) */
+		bg_stars[i].x += scroll_speed * layer_speed * 0.016f;
+
+		/* Wrap around */
+		if (bg_stars[i].x > WIDTH) {
+			bg_stars[i].x = 0;
+		}
+
+		/* Draw star */
+		int sx = (int)bg_stars[i].x;
+		int sy = (int)bg_stars[i].y;
+		if (sx >= 0 && sx < WIDTH && sy >= 0 && sy < HEIGHT) {
+			int b = bg_stars[i].brightness;
+			Uint32 color = 0xFF000000 | (b << 16) | (b << 8) | b;
+			ctx->pixels[sy * WIDTH + sx] = color;
+		}
+	}
+
+	/* Render horizontal raster bars behind the ball */
+	float t = ctx->time;
+	int num_bars = 6;
+	for (int i = 0; i < num_bars; i++) {
+		/* Calculate bar position with sine wave motion */
+		float base_y = (i * HEIGHT / num_bars) + sinf(t * 1.2f + i * 0.9f) * 60.0f;
+		int bar_height = 50;  /* Fatter bars */
+
+		/* HSV to RGB for rainbow effect */
+		float hue = (i / (float)num_bars + t * 0.15f);
+		hue = hue - floorf(hue);  /* Keep in 0-1 range */
+
+		int h_section = (int)(hue * 6);
+		float f = hue * 6 - h_section;
+		int v = 200;  /* Slightly dimmer so ball stands out */
+		int p = 0;
+		int q = (int)(v * (1 - f));
+		int t_val = (int)(v * f);
+
+		int r, g, b;
+		switch (h_section % 6) {
+		case 0: r = v; g = t_val; b = p; break;
+		case 1: r = q; g = v; b = p; break;
+		case 2: r = p; g = v; b = t_val; break;
+		case 3: r = p; g = q; b = v; break;
+		case 4: r = t_val; g = p; b = v; break;
+		default: r = v; g = p; b = q; break;
+		}
+
+		/* Draw bar with gradient */
+		for (int dy = 0; dy < bar_height; dy++) {
+			int y = (int)base_y + dy;
+			if (y >= 0 && y < HEIGHT - 100) {  /* Leave room for scroll text */
+				/* Gradient brightness based on position in bar */
+				float brightness = 1.0f - fabsf(dy - bar_height / 2.0f) / (bar_height / 2.0f);
+				brightness = brightness * brightness;  /* Squared for sharper falloff */
+
+				int br = (int)(r * brightness);
+				int bg = (int)(g * brightness);
+				int bb = (int)(b * brightness);
+
+				Uint32 color = 0xFF000000 | (br << 16) | (bg << 8) | bb;
+				for (int x = 0; x < WIDTH; x++) {
+					ctx->pixels[y * WIDTH + x] = color;
+				}
+			}
+		}
+	}
+
+	/* Update ball position with physics */
+	ball_x += vel_x;
+	ball_y += vel_y;
+
+	float radius = 80.0f;
+	float squash_intensity = 0.15f;
+	float recovery_speed = 0.2f;
+
+	/* Bounce off edges with squash */
+	if (ball_x - radius < 0 || ball_x + radius > WIDTH) {
+		vel_x = -vel_x;
+		ball_x = (ball_x < WIDTH / 2) ? radius : WIDTH - radius;
+		squash_x = 1.0f - squash_intensity;  /* Squash horizontally */
+		squash_y = 1.0f + squash_intensity;  /* Stretch vertically */
+	}
+	if (ball_y - radius < 0 || ball_y + radius > HEIGHT) {
+		vel_y = -vel_y;
+		ball_y = (ball_y < HEIGHT / 2) ? radius : HEIGHT - radius;
+		squash_y = 1.0f - squash_intensity;  /* Squash vertically */
+		squash_x = 1.0f + squash_intensity;  /* Stretch horizontally */
+	}
+
+	/* Recover to normal shape */
+	squash_x += (1.0f - squash_x) * recovery_speed;
+	squash_y += (1.0f - squash_y) * recovery_speed;
+
+	/* Rotation angles */
+	float rot_x = ctx->time * 0.7f;
+	float rot_y = ctx->time * 0.5f;
+	float rot_z = ctx->time * 0.3f;
+
+	/* Render sphere points */
+	for (int i = 0; i < NUM_BALL_STARS; i++) {
+		float x = sphere_points[i][0] * radius;
+		float y = sphere_points[i][1] * radius;
+		float z = sphere_points[i][2] * radius;
+
+		/* Apply squash and stretch */
+		x *= squash_x;
+		y *= squash_y;
+
+		/* Rotate around X axis */
+		float y1 = y * cosf(rot_x) - z * sinf(rot_x);
+		float z1 = y * sinf(rot_x) + z * cosf(rot_x);
+		y = y1;
+		z = z1;
+
+		/* Rotate around Y axis */
+		float x1 = x * cosf(rot_y) + z * sinf(rot_y);
+		z1 = -x * sinf(rot_y) + z * cosf(rot_y);
+		x = x1;
+		z = z1;
+
+		/* Rotate around Z axis */
+		float x2 = x * cosf(rot_z) - y * sinf(rot_z);
+		float y2 = x * sinf(rot_z) + y * cosf(rot_z);
+		x = x2;
+		y = y2;
+
+		/* Project to 2D */
+		float depth = 200.0f / (200.0f + z);
+		int sx = (int)(ball_x + x * depth);
+		int sy = (int)(ball_y + y * depth);
+
+		/* Color based on depth (closer = brighter) */
+		int brightness = (int)(128 + 127 * depth);
+		if (brightness < 0) brightness = 0;
+		if (brightness > 255) brightness = 255;
+
+		/* Draw star with size based on depth */
+		if (sx >= 1 && sx < WIDTH - 1 && sy >= 1 && sy < HEIGHT - 1) {
+			Uint32 color = 0xFF000000 | (brightness << 16) | (brightness << 8) | brightness;
+
+			/* Larger stars for closer points */
+			if (z > 0) {
+				ctx->pixels[sy * WIDTH + sx] = color;
+				ctx->pixels[sy * WIDTH + sx - 1] = color;
+				ctx->pixels[sy * WIDTH + sx + 1] = color;
+				ctx->pixels[(sy - 1) * WIDTH + sx] = color;
+				ctx->pixels[(sy + 1) * WIDTH + sx] = color;
+			} else {
+				ctx->pixels[sy * WIDTH + sx] = color;
+			}
+		}
+	}
+
+	SDL_UpdateTexture(ctx->texture, NULL, ctx->pixels, WIDTH * sizeof(Uint32));
+	SDL_RenderClear(ctx->renderer);
+	SDL_RenderCopy(ctx->renderer, ctx->texture, NULL, NULL);
+}
+
 /* Bouncing logo effect with squash and stretch */
 void render_bouncing_logo(DemoContext *ctx)
 {
@@ -922,12 +1144,13 @@ int main(int argc, char *argv[])
 			printf("  3 - Tunnel\n");
 			printf("  4 - Bouncing Logo (hidden - manual only)\n");
 			printf("  5 - Raining Logo\n");
+			printf("  6 - 3D Star Ball\n");
 			printf("\nExamples:\n");
-			printf("  %s           # Auto-cycle through scenes 0-3 and 5\n", argv[0]);
+			printf("  %s           # Auto-cycle through scenes 0-3, 5-6\n", argv[0]);
 			printf("  %s 2         # Show only cube scene\n", argv[0]);
-			printf("  %s 1 3 5     # Cycle between plasma, tunnel, and raining logo\n", argv[0]);
+			printf("  %s 1 3 5 6   # Cycle between plasma, tunnel, raining logo, and star ball\n", argv[0]);
 			printf("  %s -d 30     # Auto-cycle with 30 second scenes\n", argv[0]);
-			printf("  %s -d 10 2 5 # Cycle cube and raining logo, 10 sec each\n", argv[0]);
+			printf("  %s -d 10 2 6 # Cycle cube and star ball, 10 sec each\n", argv[0]);
 			IMG_Quit();
 			TTF_Quit();
 			SDL_Quit();
@@ -955,12 +1178,12 @@ int main(int argc, char *argv[])
 		else {
 			/* Non-option argument - treat as scene number */
 			int scene = atoi(argv[i]);
-			if (scene >= 0 && scene <= 5) {
-				if (num_scenes < 6) {
+			if (scene >= 0 && scene <= 6) {
+				if (num_scenes < 7) {
 					scene_list[num_scenes++] = scene;
 				}
 			} else {
-				fprintf(stderr, "Error: Invalid scene number '%s'. Use 0-5.\n", argv[i]);
+				fprintf(stderr, "Error: Invalid scene number '%s'. Use 0-6.\n", argv[i]);
 				IMG_Quit();
 				TTF_Quit();
 				SDL_Quit();
@@ -990,7 +1213,8 @@ int main(int argc, char *argv[])
 		ctx.scene_list[2] = 2;
 		ctx.scene_list[3] = 3;
 		ctx.scene_list[4] = 5;
-		ctx.num_scenes = 5;
+		ctx.scene_list[5] = 6;
+		ctx.num_scenes = 6;
 		ctx.current_scene_index = 0;
 		ctx.current_scene = ctx.scene_list[0];
 	}
@@ -1222,6 +1446,11 @@ int main(int argc, char *argv[])
 		case 5:
 			ctx.scroll_style = SCROLL_BOTTOM_TRADITIONAL;
 			render_raining_logo(&ctx);
+			render_scroll_text(&ctx);
+			break;
+		case 6:
+			ctx.scroll_style = SCROLL_BOTTOM_TRADITIONAL;
+			render_star_ball(&ctx);
 			render_scroll_text(&ctx);
 			break;
 		}
