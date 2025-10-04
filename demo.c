@@ -12,6 +12,10 @@
 #include <stdio.h>
 #include <string.h>
 
+/* Embedded font and image data */
+#include "font_data.h"
+#include "image_data.h"
+
 #define WIDTH 800
 #define HEIGHT 600
 #define PI 3.14159265358979323846
@@ -620,10 +624,21 @@ int main(int argc, char *argv[]) {
                                     SDL_TEXTUREACCESS_STREAMING,
                                     WIDTH, HEIGHT);
     
-    /* Load local Topaz-8 font */
-    ctx.font = TTF_OpenFont("topaz-8.otf", 48);
+    /* Load embedded Topaz-8 font from memory */
+    SDL_RWops *font_rw = SDL_RWFromConstMem(topaz_8_otf, topaz_8_otf_len);
+    if (!font_rw) {
+        fprintf(stderr, "Failed to create RWops for font: %s\n", SDL_GetError());
+        SDL_DestroyTexture(ctx.texture);
+        SDL_DestroyRenderer(ctx.renderer);
+        SDL_DestroyWindow(ctx.window);
+        TTF_Quit();
+        SDL_Quit();
+        return 1;
+    }
+
+    ctx.font = TTF_OpenFontRW(font_rw, 1, 48);  /* 1 = automatically close RW */
     if (!ctx.font) {
-        fprintf(stderr, "Failed to load topaz-8.otf: %s\n", TTF_GetError());
+        fprintf(stderr, "Failed to load embedded font: %s\n", TTF_GetError());
         SDL_DestroyTexture(ctx.texture);
         SDL_DestroyRenderer(ctx.renderer);
         SDL_DestroyWindow(ctx.window);
@@ -641,23 +656,31 @@ int main(int argc, char *argv[]) {
                                            400, 300);
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");  /* Nearest neighbor for retro look */
 
-    /* Load jack.png */
-    ctx.jack_surface = IMG_Load("jack.png");
-    if (!ctx.jack_surface) {
-        fprintf(stderr, "Warning: Failed to load jack.png: %s\n", IMG_GetError());
+    /* Load embedded jack.png from memory */
+    SDL_RWops *image_rw = SDL_RWFromConstMem(jack_png, jack_png_len);
+    if (!image_rw) {
+        fprintf(stderr, "Warning: Failed to create RWops for image: %s\n", SDL_GetError());
         fprintf(stderr, "Cube will render without texture.\n");
         ctx.jack_texture = NULL;
+        ctx.jack_surface = NULL;
     } else {
-        /* Convert to RGB888 format to strip alpha channel */
-        SDL_Surface *converted = SDL_ConvertSurfaceFormat(ctx.jack_surface, SDL_PIXELFORMAT_RGB888, 0);
-        if (converted) {
-            SDL_FreeSurface(ctx.jack_surface);
-            ctx.jack_surface = converted;
+        ctx.jack_surface = IMG_Load_RW(image_rw, 1);  /* 1 = automatically close RW */
+        if (!ctx.jack_surface) {
+            fprintf(stderr, "Warning: Failed to load embedded image: %s\n", IMG_GetError());
+            fprintf(stderr, "Cube will render without texture.\n");
+            ctx.jack_texture = NULL;
+        } else {
+            /* Convert to RGB888 format to strip alpha channel */
+            SDL_Surface *converted = SDL_ConvertSurfaceFormat(ctx.jack_surface, SDL_PIXELFORMAT_RGB888, 0);
+            if (converted) {
+                SDL_FreeSurface(ctx.jack_surface);
+                ctx.jack_surface = converted;
+            }
+            /* Create and cache the texture */
+            ctx.jack_texture = SDL_CreateTextureFromSurface(ctx.renderer, ctx.jack_surface);
+            SDL_SetTextureBlendMode(ctx.jack_texture, SDL_BLENDMODE_NONE);
+            SDL_SetTextureAlphaMod(ctx.jack_texture, 255);
         }
-        /* Create and cache the texture */
-        ctx.jack_texture = SDL_CreateTextureFromSurface(ctx.renderer, ctx.jack_surface);
-        SDL_SetTextureBlendMode(ctx.jack_texture, SDL_BLENDMODE_NONE);
-        SDL_SetTextureAlphaMod(ctx.jack_texture, 255);
     }
 
     /* Initialize starfield */
@@ -669,7 +692,6 @@ int main(int argc, char *argv[]) {
 
     int running = 1;
     Uint32 start_time = SDL_GetTicks();
-    Uint32 last_time = start_time;
     Uint32 scene_start = start_time;
 
     while (running) {
@@ -686,7 +708,6 @@ int main(int argc, char *argv[]) {
         Uint32 current_time = SDL_GetTicks();
         ctx.time = (current_time - scene_start) / 1000.0f;
         ctx.global_time = (current_time - start_time) / 1000.0f;
-        last_time = current_time;
 
         /* Handle scene transitions with fade (only if not fixed) */
         if (ctx.fixed_scene == -1) {
@@ -710,7 +731,6 @@ int main(int argc, char *argv[]) {
                     if (ctx.fade_alpha < 0.5f) {
                         ctx.current_scene = (ctx.current_scene + 1) % 4;
                         scene_start = current_time - (Uint32)fade_duration;
-                        last_time = current_time - (Uint32)fade_duration;
                         ctx.time = 0;
                     }
                     ctx.fade_alpha = fade_progress - 1.0f;
@@ -719,7 +739,6 @@ int main(int argc, char *argv[]) {
                     ctx.fade_alpha = 1.0f;
                     ctx.fading = 0;
                     scene_start = current_time;
-                    last_time = current_time;
                     ctx.time = 0;
                 }
             } else {

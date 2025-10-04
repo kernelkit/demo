@@ -5,15 +5,18 @@ RUN apk add --no-cache \
     sdl2-dev \
     sdl2_ttf \
     sdl2_ttf-dev \
-    ttf-dejavu \
+    sdl2_image \
+    sdl2_image-dev \
     gcc \
     musl-dev \
-    make
+    make \
+    vim
 
 WORKDIR /app
-COPY demo.c .
 
-RUN gcc -o demo demo.c -lSDL2 -lSDL2_ttf -lm -O2
+COPY demo.c Makefile topaz-8.otf jack.png ./
+
+RUN make
 
 ENV DISPLAY=:0
 

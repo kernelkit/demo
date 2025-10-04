@@ -7,10 +7,19 @@ DEBUGFLAGS = -g -O0 -DDEBUG
 
 TARGET     = demo
 SOURCE     = demo.c
+HEADERS    = font_data.h image_data.h
 
 all: $(TARGET)
 
-$(TARGET): $(SOURCE)
+# Generate embedded font data from topaz-8.otf
+font_data.h: topaz-8.otf
+	xxd -i topaz-8.otf > font_data.h
+
+# Generate embedded image data from jack.png
+image_data.h: jack.png
+	xxd -i jack.png > image_data.h
+
+$(TARGET): $(SOURCE) $(HEADERS)
 	$(CC) $(CFLAGS) -o $(TARGET) $(SOURCE) $(LDLIBS)
 
 debug: $(SOURCE)
@@ -20,7 +29,7 @@ run: $(TARGET)
 	./$(TARGET)
 
 clean:
-	rm -f $(TARGET)
+	rm -f $(TARGET) $(HEADERS)
 
 docker-build:
 	docker build -t demo .
