@@ -37,12 +37,18 @@ jobs:
                   libsdl2-image-dev libsdl2-mixer-dev build-essential && \
                 make clean && make && \
                 (ARCH=aarch64 make appimage || (
+                  echo \"AppImage build failed, trying fallback...\" && \
                   wget -q -c https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-aarch64.AppImage -O appimagetool && \
                   chmod +x appimagetool && \
+                  echo \"Downloaded appimagetool, checking file:\" && \
+                  file appimagetool && \
+                  echo \"Attempting to run appimagetool directly...\" && \
+                  (./appimagetool --version 2>&1 || echo \"Direct execution failed with: \$?\") && \
+                  echo \"Extracting appimagetool...\" && \
                   ./appimagetool --appimage-extract && \
                   mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/256x256/apps && \
                   cp demo AppDir/usr/bin/ && \
-                  printf \"[Desktop Entry]\\nType=Application\\nName=Infix Demo\\nExec=usr/bin/demo\\nIcon=demo\\nCategories=Game;\\n\" > AppDir/usr/share/applications/demo.desktop && \
+                  echo -e \"[Desktop Entry]\nType=Application\nName=Infix Demo\nExec=usr/bin/demo\nIcon=demo\nCategories=Game;\" > AppDir/usr/share/applications/demo.desktop && \
                   cp jack.png AppDir/usr/share/icons/hicolor/256x256/apps/demo.png && \
                   ln -sf usr/share/applications/demo.desktop AppDir/demo.desktop && \
                   ln -sf usr/share/icons/hicolor/256x256/apps/demo.png AppDir/demo.png && \
