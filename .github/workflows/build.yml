@@ -33,7 +33,7 @@ jobs:
               --entrypoint /bin/bash \
               ubuntu:22.04 -c '
                 apt-get update && \
-                apt-get install -y wget file libfuse2 libsdl2-dev libsdl2-ttf-dev \
+                apt-get install -y wget file libfuse2 xxd libsdl2-dev libsdl2-ttf-dev \
                   libsdl2-image-dev libsdl2-mixer-dev build-essential && \
                 make clean && make && \
                 ARCH=aarch64 make appimage
