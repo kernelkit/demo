@@ -32,7 +32,7 @@ music_data.h: music.mod
 $(TARGET): $(SOURCE) $(HEADERS)
 	$(CC) $(CFLAGS) -o $(TARGET) $(SOURCE) $(LDLIBS)
 
-debug: $(SOURCE)
+debug: $(SOURCE) $(HEADERS)
 	$(CC) $(CFLAGS) $(DEBUGFLAGS) -o $(TARGET) $(SOURCE) $(LDLIBS)
 
 run: $(TARGET)
@@ -40,6 +40,7 @@ run: $(TARGET)
 
 clean:
 	rm -f $(TARGET) font_data.h image_data.h music_data.h
+	rm -rf AppDir appimagetool InfixDemo-x86_64.AppImage
 
 docker-build:
 	docker build -t demo .
@@ -51,4 +52,21 @@ docker-run: docker-build
 		-v /tmp/.X11-unix:/tmp/.X11-unix \
 		demo
 
-.PHONY: all clean run debug docker-build docker-run
+appimage: $(TARGET)
+	@echo "Creating AppImage..."
+	@mkdir -p AppDir/usr/bin
+	@mkdir -p AppDir/usr/share/applications
+	@mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+	@cp $(TARGET) AppDir/usr/bin/
+	@printf '[Desktop Entry]\nType=Application\nName=Infix Demo\nExec=usr/bin/demo\nIcon=demo\nCategories=Game;\n' > AppDir/usr/share/applications/demo.desktop
+	@cp jack.png AppDir/usr/share/icons/hicolor/256x256/apps/demo.png
+	@ln -sf usr/share/applications/demo.desktop AppDir/demo.desktop
+	@ln -sf usr/share/icons/hicolor/256x256/apps/demo.png AppDir/demo.png
+	@ln -sf usr/bin/demo AppDir/AppRun
+	@wget -q -c https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
+	@chmod +x appimagetool
+	@./appimagetool AppDir InfixDemo-x86_64.AppImage
+	@rm -rf AppDir appimagetool
+	@echo "AppImage created: InfixDemo-x86_64.AppImage"
+
+.PHONY: all clean run debug appimage docker-build docker-run

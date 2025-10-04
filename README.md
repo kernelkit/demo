@@ -48,7 +48,30 @@ Or run a specific scene:
 ./demo 2  # Run only the cube scene
 ```
 
-## Docker
+## Distribution
+
+### AppImage (Recommended for sharing)
+
+Create a portable AppImage that works on most Linux distributions:
+
+```
+make appimage
+```
+
+This creates `InfixDemo-x86_64.AppImage` - a single executable file you can share with friends. They just need to:
+
+1. Download the `.AppImage` file
+2. Make it executable: `chmod +x InfixDemo-x86_64.AppImage`
+3. Run it: `./InfixDemo-x86_64.AppImage`
+
+**What is AppImage?**
+- Single-file executable that works on most Linux distros
+- No installation required - just download and run
+- Bundles all dependencies (SDL2, fonts, music, textures)
+- Works on Ubuntu, Debian, Fedora, Arch, etc.
+- Great for distributing demos to friends!
+
+### Docker
 
 ```
 make docker-run
