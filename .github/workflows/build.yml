@@ -36,7 +36,20 @@ jobs:
                 apt-get install -y wget file libfuse2 xxd libsdl2-dev libsdl2-ttf-dev \
                   libsdl2-image-dev libsdl2-mixer-dev build-essential && \
                 make clean && make && \
-                ARCH=aarch64 make appimage
+                (ARCH=aarch64 make appimage || (
+                  wget -q -c https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-aarch64.AppImage -O appimagetool && \
+                  chmod +x appimagetool && \
+                  ./appimagetool --appimage-extract && \
+                  mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/256x256/apps && \
+                  cp demo AppDir/usr/bin/ && \
+                  printf \"[Desktop Entry]\\nType=Application\\nName=Infix Demo\\nExec=usr/bin/demo\\nIcon=demo\\nCategories=Game;\\n\" > AppDir/usr/share/applications/demo.desktop && \
+                  cp jack.png AppDir/usr/share/icons/hicolor/256x256/apps/demo.png && \
+                  ln -sf usr/share/applications/demo.desktop AppDir/demo.desktop && \
+                  ln -sf usr/share/icons/hicolor/256x256/apps/demo.png AppDir/demo.png && \
+                  ln -sf usr/bin/demo AppDir/AppRun && \
+                  ARCH=aarch64 squashfs-root/AppRun AppDir InfixDemo-aarch64.AppImage && \
+                  rm -rf AppDir squashfs-root appimagetool
+                ))
               '
           else
             sudo apt-get update

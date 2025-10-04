@@ -67,10 +67,11 @@ appimage: $(TARGET)
 	@ln -sf usr/share/applications/demo.desktop AppDir/demo.desktop
 	@ln -sf usr/share/icons/hicolor/256x256/apps/demo.png AppDir/demo.png
 	@ln -sf usr/bin/demo AppDir/AppRun
-	@wget -q -c https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
-	@chmod +x appimagetool
-	@./appimagetool AppDir InfixDemo-x86_64.AppImage
-	@rm -rf AppDir appimagetool
-	@echo "AppImage created: InfixDemo-x86_64.AppImage"
+	@ARCH=$${ARCH:-x86_64}; \
+	wget -q -c https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-$${ARCH}.AppImage -O appimagetool && \
+	chmod +x appimagetool && \
+	./appimagetool AppDir InfixDemo-$${ARCH}.AppImage && \
+	rm -rf AppDir appimagetool && \
+	echo "AppImage created: InfixDemo-$${ARCH}.AppImage"
 
 .PHONY: all clean run debug appimage docker-build docker-run
