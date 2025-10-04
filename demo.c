@@ -485,8 +485,8 @@ void render_star_ball(DemoContext *ctx)
 			bg_stars[i].y = (float)(rand() % HEIGHT);
 			bg_stars[i].layer = i % 3;  /* Distribute across 3 layers */
 			/* Fainter stars for farther layers */
-			bg_stars[i].brightness = (bg_stars[i].layer == 0) ? 40 :
-			                         (bg_stars[i].layer == 1) ? 60 : 80;
+			bg_stars[i].brightness = (bg_stars[i].layer == 0) ? 60 :
+			                         (bg_stars[i].layer == 1) ? 90 : 120;
 		}
 		bg_initialized = 1;
 	}
@@ -535,7 +535,7 @@ void render_star_ball(DemoContext *ctx)
 
 		int h_section = (int)(hue * 6);
 		float f = hue * 6 - h_section;
-		int v = 200;  /* Slightly dimmer so ball stands out */
+		int v = 160;  /* Dimmer so ball and stars stand out */
 		int p = 0;
 		int q = (int)(v * (1 - f));
 		int t_val = (int)(v * f);
