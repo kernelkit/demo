@@ -23,8 +23,10 @@
 #include "music_data.h"
 #endif
 
-#define WIDTH 800
-#define HEIGHT 600
+/* Base dimensions - can be overridden at runtime */
+static int WIDTH = 800;
+static int HEIGHT = 600;
+
 #define PI 3.14159265358979323846
 #define NUM_STARS 200
 #define MAX_LOGO_PARTICLES 8192
@@ -1128,6 +1130,13 @@ int main(int argc, char *argv[])
 	int scene_list[6];
 	int num_scenes = 0;
 
+	/* Window/display settings */
+	int fullscreen = 0;
+	int window_width = 0;   /* 0 = auto-detect */
+	int window_height = 0;
+	int scale_factor = 1;
+	int auto_resolution = 1;  /* Auto-detect and adapt resolution */
+
 	/* Parse command-line arguments */
 	ctx.scene_duration = 15000;  /* Default: 15 seconds per scene */
 
@@ -1135,8 +1144,11 @@ int main(int argc, char *argv[])
 		if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
 			printf("Usage: %s [OPTIONS] [SCENE...]\n", argv[0]);
 			printf("\nOptions:\n");
-			printf("  -h, --help        Show this help message\n");
+			printf("  -h, --help         Show this help message\n");
 			printf("  -d, --duration SEC Set scene duration in seconds (default: 15)\n");
+			printf("  -f, --fullscreen   Run in fullscreen mode\n");
+			printf("  -w, --window WxH   Set window size (e.g., 1920x1080)\n");
+			printf("  -s, --scale N      Integer scaling factor (e.g., 2 = 1600x1200)\n");
 			printf("\nScenes:\n");
 			printf("  0 - Starfield\n");
 			printf("  1 - Plasma\n");
@@ -1174,6 +1186,49 @@ int main(int argc, char *argv[])
 				SDL_Quit();
 				return 1;
 			}
+		}
+		else if (strcmp(argv[i], "-f") == 0 || strcmp(argv[i], "--fullscreen") == 0) {
+			fullscreen = 1;
+		}
+		else if (strcmp(argv[i], "-w") == 0 || strcmp(argv[i], "--window") == 0) {
+			if (i + 1 >= argc) {
+				fprintf(stderr, "Error: %s requires an argument\n", argv[i]);
+				IMG_Quit();
+				TTF_Quit();
+				SDL_Quit();
+				return 1;
+			}
+			if (sscanf(argv[++i], "%dx%d", &window_width, &window_height) != 2) {
+				fprintf(stderr, "Error: Invalid window size '%s'. Use format WxH (e.g., 1920x1080)\n", argv[i]);
+				IMG_Quit();
+				TTF_Quit();
+				SDL_Quit();
+				return 1;
+			}
+			/* Adapt render resolution to match aspect ratio */
+			float aspect = (float)window_width / window_height;
+			WIDTH = 800;
+			HEIGHT = (int)(800.0f / aspect);
+			auto_resolution = 0;  /* Manual window size disables auto-detection */
+		}
+		else if (strcmp(argv[i], "-s") == 0 || strcmp(argv[i], "--scale") == 0) {
+			if (i + 1 >= argc) {
+				fprintf(stderr, "Error: %s requires an argument\n", argv[i]);
+				IMG_Quit();
+				TTF_Quit();
+				SDL_Quit();
+				return 1;
+			}
+			scale_factor = atoi(argv[++i]);
+			if (scale_factor < 1) {
+				fprintf(stderr, "Error: Invalid scale factor '%s'. Must be >= 1\n", argv[i]);
+				IMG_Quit();
+				TTF_Quit();
+				SDL_Quit();
+				return 1;
+			}
+			window_width = WIDTH * scale_factor;
+			window_height = HEIGHT * scale_factor;
 		}
 		else {
 			/* Non-option argument - treat as scene number */
@@ -1219,11 +1274,52 @@ int main(int argc, char *argv[])
 		ctx.current_scene = ctx.scene_list[0];
 	}
 
+	/* Set scaling quality hint before creating renderer */
+	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");
+
+	/* Auto-detect display resolution and adapt if needed */
+	if (auto_resolution || fullscreen) {
+		SDL_DisplayMode dm;
+		if (SDL_GetCurrentDisplayMode(0, &dm) == 0) {
+			if (fullscreen) {
+				/* Use native display resolution */
+				window_width = dm.w;
+				window_height = dm.h;
+			} else if (window_width == 0) {
+				/* Auto-size window to 80% of display */
+				window_width = dm.w * 0.8;
+				window_height = dm.h * 0.8;
+			}
+
+			/* Adapt internal resolution to match display aspect ratio */
+			float display_aspect = (float)dm.w / dm.h;
+
+			/* Always adapt to match display aspect ratio */
+			WIDTH = 800;
+			HEIGHT = (int)(800.0f / display_aspect);
+
+			/* fprintf(stderr, "Display: %dx%d (aspect %.2f), Internal: %dx%d\n", */
+			/*         dm.w, dm.h, display_aspect, WIDTH, HEIGHT); */
+		}
+	}
+
+	/* Default window size if not set */
+	if (window_width == 0) window_width = WIDTH;
+	if (window_height == 0) window_height = HEIGHT;
+
+	/* fprintf(stderr, "Window: %dx%d, Render: %dx%d\n", */
+	/*         window_width, window_height, WIDTH, HEIGHT); */
+
+	Uint32 window_flags = SDL_WINDOW_SHOWN;
+	if (fullscreen) {
+		window_flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
+	}
+
 	ctx.window = SDL_CreateWindow("Infix Container Demo",
 	                               SDL_WINDOWPOS_CENTERED,
 	                               SDL_WINDOWPOS_CENTERED,
-	                               WIDTH, HEIGHT,
-	                               SDL_WINDOW_SHOWN);
+	                               window_width, window_height,
+	                               window_flags);
 
 	if (!ctx.window) {
 		fprintf(stderr, "Window creation failed: %s\n", SDL_GetError());
@@ -1234,6 +1330,10 @@ int main(int argc, char *argv[])
 
 	ctx.renderer = SDL_CreateRenderer(ctx.window, -1,
 		SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+
+	/* Set logical rendering size - render at adapted resolution, display scales automatically */
+	SDL_RenderSetLogicalSize(ctx.renderer, WIDTH, HEIGHT);
+
 	ctx.texture = SDL_CreateTexture(ctx.renderer,
 	                                SDL_PIXELFORMAT_ARGB8888,
 	                                SDL_TEXTUREACCESS_STREAMING,
