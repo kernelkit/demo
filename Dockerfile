@@ -16,7 +16,7 @@ RUN apk add --no-cache \
 
 WORKDIR /app
 
-COPY demo.c Makefile topaz-8.otf jack.png music.mod* ./
+COPY demo.c Makefile topaz-8.otf jack.png logo.png music.mod* ./
 
 RUN make
 
