@@ -27,6 +27,7 @@
 #define HEIGHT 600
 #define PI 3.14159265358979323846
 #define NUM_STARS 200
+#define MAX_LOGO_PARTICLES 8192
 
 typedef enum {
     SCROLL_NONE,
@@ -37,6 +38,14 @@ typedef enum {
 typedef struct {
     float x, y, z;
 } Star;
+
+typedef struct {
+    float x, y;          /* Current position */
+    float vx, vy;        /* Velocity */
+    Uint32 color;        /* Pixel color from logo */
+    int active;          /* Is this particle alive? */
+    float wobble_phase;  /* For wobble animation */
+} LogoParticle;
 
 typedef struct {
     SDL_Window *window;
@@ -507,6 +516,155 @@ void render_bouncing_logo(DemoContext *ctx) {
                      rotation, NULL, SDL_FLIP_NONE);
 }
 
+/* Raining logo effect - logo falls in line by line from bottom to top */
+void render_raining_logo(DemoContext *ctx) {
+    /* Animation phases */
+    #define PHASE_RAIN_IN 0
+    #define PHASE_SETTLE 1
+    #define PHASE_WOBBLE 2
+    #define PHASE_RAIN_OUT 3
+    #define PHASE_PAUSE 4
+
+    static int current_phase = PHASE_RAIN_IN;
+    static float phase_time = 0.0f;
+
+    /* Clear to dark blue background */
+    for (int i = 0; i < WIDTH * HEIGHT; i++) {
+        ctx->pixels[i] = 0xFF001020;
+    }
+
+    if (!ctx->logo_texture) {
+        SDL_UpdateTexture(ctx->texture, NULL, ctx->pixels, WIDTH * sizeof(Uint32));
+        SDL_RenderClear(ctx->renderer);
+        SDL_RenderCopy(ctx->renderer, ctx->texture, NULL, NULL);
+        return;
+    }
+
+    int logo_w, logo_h;
+    SDL_QueryTexture(ctx->logo_texture, NULL, NULL, &logo_w, &logo_h);
+
+    /* Update animation time */
+    float dt = 0.016f;  /* Assume 60 fps */
+    phase_time += dt;
+
+    /* Phase transitions */
+    switch (current_phase) {
+        case PHASE_RAIN_IN:
+            if (phase_time > 2.0f) {  /* 2 seconds to rain in */
+                current_phase = PHASE_SETTLE;
+                phase_time = 0.0f;
+            }
+            break;
+        case PHASE_SETTLE:
+            if (phase_time > 0.3f) {  /* 0.3 seconds settling */
+                current_phase = PHASE_WOBBLE;
+                phase_time = 0.0f;
+            }
+            break;
+        case PHASE_WOBBLE:
+            if (phase_time > 1.5f) {  /* 1.5 seconds wobbling */
+                current_phase = PHASE_RAIN_OUT;
+                phase_time = 0.0f;
+            }
+            break;
+        case PHASE_RAIN_OUT:
+            if (phase_time > 2.0f) {  /* 2 seconds to rain out */
+                current_phase = PHASE_PAUSE;
+                phase_time = 0.0f;
+            }
+            break;
+        case PHASE_PAUSE:
+            if (phase_time > 0.5f) {  /* 0.5 second pause */
+                current_phase = PHASE_RAIN_IN;
+                phase_time = 0.0f;
+            }
+            break;
+    }
+
+    /* Render background */
+    SDL_UpdateTexture(ctx->texture, NULL, ctx->pixels, WIDTH * sizeof(Uint32));
+    SDL_RenderClear(ctx->renderer);
+    SDL_RenderCopy(ctx->renderer, ctx->texture, NULL, NULL);
+
+    /* Calculate logo position */
+    int base_x = (WIDTH - logo_w) / 2;
+    int base_y = (HEIGHT - logo_h) / 2;
+
+    if (current_phase == PHASE_RAIN_IN) {
+        /* Logo falls down from above screen, bottom lines fall first */
+        /* Each line has a delay based on its position from bottom */
+        for (int line = 0; line < logo_h; line++) {
+            int src_y = line;
+            /* Bottom lines start falling first - smaller delay for bottom */
+            float delay = (float)(logo_h - line - 1) * 0.005f;
+            float line_time = phase_time - delay;
+
+            if (line_time > 0) {
+                /* Calculate fall position with gravity (y = 0.5 * g * t^2) */
+                float gravity = 400.0f;
+                float y_pos = -logo_h + src_y + (0.5f * gravity * line_time * line_time);
+
+                /* Stop at target position */
+                float target = base_y + src_y;
+                if (y_pos > target) y_pos = target;
+
+                SDL_Rect src = { 0, src_y, logo_w, 1 };
+                SDL_Rect dst = { base_x, (int)y_pos, logo_w, 1 };
+                SDL_RenderCopy(ctx->renderer, ctx->logo_texture, &src, &dst);
+            }
+        }
+    }
+    else if (current_phase == PHASE_SETTLE) {
+        /* Slight bounce */
+        float settle = exp(-phase_time * 10.0f) * sin(phase_time * 30.0f) * 5.0f;
+        SDL_Rect dst = { base_x, base_y + (int)settle, logo_w, logo_h };
+        SDL_RenderCopy(ctx->renderer, ctx->logo_texture, NULL, &dst);
+    }
+    else if (current_phase == PHASE_WOBBLE) {
+        /* Jelly wobble - each line wobbles horizontally with different phase */
+        for (int line = 0; line < logo_h; line++) {
+            /* Sine wave wobble based on line position */
+            float wobble_phase = (float)line / logo_h * 3.14159f * 2.0f;
+            float wobble = sin(phase_time * 5.0f + wobble_phase) * 8.0f;
+            /* Dampen over time */
+            float dampen = exp(-phase_time * 1.5f);
+            wobble *= dampen;
+
+            SDL_Rect src = { 0, line, logo_w, 1 };
+            SDL_Rect dst = { base_x + (int)wobble, base_y + line, logo_w, 1 };
+            SDL_RenderCopy(ctx->renderer, ctx->logo_texture, &src, &dst);
+        }
+    }
+    else if (current_phase == PHASE_RAIN_OUT) {
+        /* Rain out through bottom, top lines fall first with gravity */
+        for (int line = 0; line < logo_h; line++) {
+            int src_y = line;
+            /* Top lines start falling first */
+            float delay = (float)line * 0.005f;
+            float line_time = phase_time - delay;
+
+            if (line_time > 0) {
+                /* Calculate fall position with gravity */
+                float gravity = 400.0f;
+                float start_y = base_y + src_y;
+                float y_pos = start_y + (0.5f * gravity * line_time * line_time);
+
+                /* Only render if still visible or partially visible */
+                if (y_pos < HEIGHT) {
+                    SDL_Rect src = { 0, src_y, logo_w, 1 };
+                    SDL_Rect dst = { base_x, (int)y_pos, logo_w, 1 };
+                    SDL_RenderCopy(ctx->renderer, ctx->logo_texture, &src, &dst);
+                }
+            } else {
+                /* Not falling yet, render at normal position */
+                SDL_Rect src = { 0, src_y, logo_w, 1 };
+                SDL_Rect dst = { base_x, base_y + src_y, logo_w, 1 };
+                SDL_RenderCopy(ctx->renderer, ctx->logo_texture, &src, &dst);
+            }
+        }
+    }
+}
+
 /* Scroll text rendering with different styles */
 void render_scroll_text(DemoContext *ctx) {
     const char *text = "    INFIX - CONTAINER DEMO"
@@ -690,19 +848,20 @@ int main(int argc, char *argv[]) {
             printf("  1 - Plasma\n");
             printf("  2 - Cube\n");
             printf("  3 - Tunnel\n");
-            printf("  4 - Bouncing Logo\n");
-            printf("\nIf no scene is specified, auto-switches between all scenes.\n");
+            printf("  4 - Bouncing Logo (hidden - manual only)\n");
+            printf("  5 - Raining Logo\n");
+            printf("\nIf no scene is specified, auto-switches between scenes 0-3 and 5.\n");
             IMG_Quit();
             TTF_Quit();
             SDL_Quit();
             return 0;
         }
         int scene = atoi(argv[1]);
-        if (scene >= 0 && scene <= 4) {
+        if (scene >= 0 && scene <= 5) {
             ctx.fixed_scene = scene;
             ctx.current_scene = scene;
         } else {
-            fprintf(stderr, "Invalid scene number. Use 0-4.\n");
+            fprintf(stderr, "Invalid scene number. Use 0-5.\n");
             IMG_Quit();
             TTF_Quit();
             SDL_Quit();
@@ -870,7 +1029,11 @@ int main(int argc, char *argv[]) {
                 } else if (fade_progress < 2.0f) {
                     /* Switch scene and fade in */
                     if (ctx.fade_alpha < 0.5f) {
-                        ctx.current_scene = (ctx.current_scene + 1) % 5;
+                        /* Skip scene 4 (bouncing logo - hidden scene) */
+                        ctx.current_scene = (ctx.current_scene + 1) % 6;
+                        if (ctx.current_scene == 4) {
+                            ctx.current_scene = 5;  /* Jump to raining logo instead */
+                        }
                         scene_start = current_time - (Uint32)fade_duration;
                         ctx.time = 0;
                     }
@@ -920,6 +1083,11 @@ int main(int argc, char *argv[]) {
             case 4:
                 ctx.scroll_style = SCROLL_BOTTOM_TRADITIONAL;
                 render_bouncing_logo(&ctx);
+                render_scroll_text(&ctx);
+                break;
+            case 5:
+                ctx.scroll_style = SCROLL_BOTTOM_TRADITIONAL;
+                render_raining_logo(&ctx);
                 render_scroll_text(&ctx);
                 break;
         }
