@@ -30,55 +30,20 @@ jobs:
           if [ "${{ matrix.arch }}" = "aarch64" ]; then
             docker run --rm --platform linux/arm64 \
               -v $PWD:/workspace -w /workspace \
-              --entrypoint /bin/bash \
-              ubuntu:22.04 -c '
+              ubuntu:22.04 /bin/bash -c '
                 apt-get update && \
-                apt-get install -y wget file libfuse2 xxd libsdl2-dev libsdl2-ttf-dev \
-                  libsdl2-image-dev libsdl2-mixer-dev build-essential && \
+                apt-get install -y xxd libsdl2-dev libsdl2-ttf-dev \
+                  libsdl2-image-dev libsdl2-mixer-dev build-essential squashfs-tools && \
                 make clean && make && \
-                (ARCH=aarch64 make appimage || (
-                  echo \"AppImage build failed, trying fallback...\" && \
-                  apt-get install -y squashfs-tools && \
-                  wget -q -c https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-aarch64.AppImage -O appimagetool.AppImage && \
-                  echo \"Extracting AppImage with unsquashfs...\" && \
-                  chmod +x appimagetool.AppImage && \
-                  ./appimagetool.AppImage --appimage-extract 2>/dev/null || unsquashfs -d squashfs-root appimagetool.AppImage && \
-                  mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/256x256/apps && \
-                  cp demo AppDir/usr/bin/ && \
-                  printf "[Desktop Entry]\nType=Application\nName=Infix Demo\nExec=usr/bin/demo\nIcon=demo\nCategories=Game;\n" > AppDir/usr/share/applications/demo.desktop
-                  cp jack.png AppDir/usr/share/icons/hicolor/256x256/apps/demo.png && \
-                  ln -sf usr/share/applications/demo.desktop AppDir/demo.desktop && \
-                  ln -sf usr/share/icons/hicolor/256x256/apps/demo.png AppDir/demo.png && \
-                  ln -sf usr/bin/demo AppDir/AppRun && \
-                  ARCH=aarch64 squashfs-root/AppRun AppDir InfixDemo-aarch64.AppImage && \
-                  rm -rf AppDir squashfs-root appimagetool.AppImage
-                ))
+                ./utils/build-appimage.sh aarch64
               '
           else
             sudo apt-get update
-            sudo apt-get install -y libfuse2 libsdl2-dev libsdl2-ttf-dev \
-              libsdl2-image-dev libsdl2-mixer-dev
+            sudo apt-get install -y libsdl2-dev libsdl2-ttf-dev \
+              libsdl2-image-dev libsdl2-mixer-dev squashfs-tools
             make clean && make
-            # Extract and run appimagetool without FUSE
-            make appimage || (
-              wget -q -c https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool &&
-              chmod +x appimagetool &&
-              ./appimagetool --appimage-extract &&
-              mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/256x256/apps &&
-              cp demo AppDir/usr/bin/ &&
-              printf "[Desktop Entry]\nType=Application\nName=Infix Demo\nExec=usr/bin/demo\nIcon=demo\nCategories=Game;\n" > AppDir/usr/share/applications/demo.desktop &&
-              cp jack.png AppDir/usr/share/icons/hicolor/256x256/apps/demo.png &&
-              ln -sf usr/share/applications/demo.desktop AppDir/demo.desktop &&
-              ln -sf usr/share/icons/hicolor/256x256/apps/demo.png AppDir/demo.png &&
-              ln -sf usr/bin/demo AppDir/AppRun &&
-              ARCH=x86_64 squashfs-root/AppRun AppDir InfixDemo-x86_64.AppImage &&
-              rm -rf AppDir squashfs-root appimagetool
-            )
+            ./utils/build-appimage.sh x86_64
           fi
-
-      - name: Rename AppImage
-        run: |
-          mv InfixDemo-x86_64.AppImage InfixDemo-${{ matrix.arch }}.AppImage || true
 
       - name: Upload AppImage artifact
         uses: actions/upload-artifact@v4
