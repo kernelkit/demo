@@ -191,10 +191,16 @@ void render_starfield(DemoContext *ctx)
 		}
 	}
 
-	/* Periodic particle bursts from center */
+	/* Update texture first for stars */
+	SDL_UpdateTexture(ctx->texture, NULL, ctx->pixels, WIDTH * sizeof(Uint32));
+	SDL_RenderClear(ctx->renderer);
+	SDL_RenderCopy(ctx->renderer, ctx->texture, NULL, NULL);
+
+	/* Periodic particle bursts from center (draw before sphere) */
 	static float last_burst_time = -999.0f;
 	static int burst_style = 0;
 	float burst_interval = 2.5f;  /* Burst every 2.5 seconds */
+
 	int cx = WIDTH / 2;
 	int cy = HEIGHT / 2;
 
@@ -211,7 +217,7 @@ void render_starfield(DemoContext *ctx)
 		int num_particles = 80;
 
 		for (int i = 0; i < num_particles; i++) {
-			float angle, radius, px_f, py_f;
+			float angle, radius;
 			int px, py, r, g, b;
 			float life = 1.0f - (time_since_burst / 2.0f);
 			if (life < 0.0f) life = 0.0f;
@@ -262,43 +268,106 @@ void render_starfield(DemoContext *ctx)
 				b = (int)(50 * ring_life);
 			}
 
-			/* Draw particle with glow */
-			for (int dy = -2; dy <= 2; dy++) {
-				for (int dx = -2; dx <= 2; dx++) {
-					int x = px + dx;
-					int y = py + dy;
+			/* Draw particle with glow using SDL rendering */
+			SDL_SetRenderDrawBlendMode(ctx->renderer, SDL_BLENDMODE_ADD);
 
-					if (x >= 0 && x < WIDTH && y >= 0 && y < HEIGHT) {
-						float dist = sqrtf(dx * dx + dy * dy);
-						if (dist <= 2.0f) {
-							float glow = (1.0f - dist / 2.0f) * 0.7f;
+			/* Draw glow layers */
+			for (int layer = 3; layer >= 1; layer--) {
+				int alpha = (int)((255.0f / (layer + 1)) * life);
+				SDL_SetRenderDrawColor(ctx->renderer, r, g, b, alpha);
 
-							int pr = (int)(r * glow);
-							int pg = (int)(g * glow);
-							int pb = (int)(b * glow);
-
-							/* Blend with existing pixel */
-							Uint32 existing = ctx->pixels[y * WIDTH + x];
-							int er = (existing >> 16) & 0xFF;
-							int eg = (existing >> 8) & 0xFF;
-							int eb = existing & 0xFF;
-
-							int nr = (pr + er > 255) ? 255 : pr + er;
-							int ng = (pg + eg > 255) ? 255 : pg + eg;
-							int nb = (pb + eb > 255) ? 255 : pb + eb;
-
-							ctx->pixels[y * WIDTH + x] = 0xFF000000 | (nr << 16) | (ng << 8) | nb;
-						}
-					}
-				}
+				SDL_Rect rect = {px - layer, py - layer, layer * 2 + 1, layer * 2 + 1};
+				SDL_RenderFillRect(ctx->renderer, &rect);
 			}
+
+			/* Bright center */
+			SDL_SetRenderDrawColor(ctx->renderer, r, g, b, 255);
+			SDL_RenderDrawPoint(ctx->renderer, px, py);
+
+			SDL_SetRenderDrawBlendMode(ctx->renderer, SDL_BLENDMODE_BLEND);
 		}
 	}
 
-	/* Update texture */
-	SDL_UpdateTexture(ctx->texture, NULL, ctx->pixels, WIDTH * sizeof(Uint32));
-	SDL_RenderClear(ctx->renderer);
-	SDL_RenderCopy(ctx->renderer, ctx->texture, NULL, NULL);
+	/* Rotating textured sphere in center with Jack image */
+	if (!ctx->jack_texture) return;
+
+	float sphere_radius = 80.0f;
+	float rotation_y = ctx->global_time * 0.8f;
+
+	/* Create sphere mesh using latitude/longitude grid */
+	int lat_segments = 20;
+	int lon_segments = 30;
+
+	for (int lat = 0; lat < lat_segments; lat++) {
+		for (int lon = 0; lon < lon_segments; lon++) {
+			/* Calculate four corners of this quad */
+			float lat0 = (lat / (float)lat_segments) * PI;
+			float lat1 = ((lat + 1) / (float)lat_segments) * PI;
+			float lon0 = (lon / (float)lon_segments) * 2 * PI + rotation_y;
+			float lon1 = ((lon + 1) / (float)lon_segments) * 2 * PI + rotation_y;
+
+			/* Four vertices of quad */
+			SDL_Vertex verts[4];
+
+			/* Vertex 0: lat0, lon0 */
+			float x0 = sphere_radius * sinf(lat0) * sinf(lon0);
+			float y0 = sphere_radius * cosf(lat0);
+			float z0 = sphere_radius * sinf(lat0) * cosf(lon0);
+			verts[0].position.x = cx + x0;
+			verts[0].position.y = cy - y0;
+			verts[0].tex_coord.x = lon / (float)lon_segments;
+			verts[0].tex_coord.y = lat / (float)lat_segments;
+
+			/* Vertex 1: lat0, lon1 */
+			float x1 = sphere_radius * sinf(lat0) * sinf(lon1);
+			float y1 = sphere_radius * cosf(lat0);
+			float z1 = sphere_radius * sinf(lat0) * cosf(lon1);
+			verts[1].position.x = cx + x1;
+			verts[1].position.y = cy - y1;
+			verts[1].tex_coord.x = (lon + 1) / (float)lon_segments;
+			verts[1].tex_coord.y = lat / (float)lat_segments;
+
+			/* Vertex 2: lat1, lon1 */
+			float x2 = sphere_radius * sinf(lat1) * sinf(lon1);
+			float y2 = sphere_radius * cosf(lat1);
+			float z2 = sphere_radius * sinf(lat1) * cosf(lon1);
+			verts[2].position.x = cx + x2;
+			verts[2].position.y = cy - y2;
+			verts[2].tex_coord.x = (lon + 1) / (float)lon_segments;
+			verts[2].tex_coord.y = (lat + 1) / (float)lat_segments;
+
+			/* Vertex 3: lat1, lon0 */
+			float x3 = sphere_radius * sinf(lat1) * sinf(lon0);
+			float y3 = sphere_radius * cosf(lat1);
+			float z3 = sphere_radius * sinf(lat1) * cosf(lon0);
+			verts[3].position.x = cx + x3;
+			verts[3].position.y = cy - y3;
+			verts[3].tex_coord.x = lon / (float)lon_segments;
+			verts[3].tex_coord.y = (lat + 1) / (float)lat_segments;
+
+			/* Backface culling - only render front-facing quads */
+			float avg_z = (z0 + z1 + z2 + z3) / 4.0f;
+
+			/* Skip if quad is facing away (back side of sphere) */
+			if (avg_z < 0) continue;
+
+			/* Lighting based on Z depth */
+			int brightness = (int)(128 + 127 * (avg_z / sphere_radius));
+			if (brightness < 0) brightness = 0;
+			if (brightness > 255) brightness = 255;
+
+			for (int i = 0; i < 4; i++) {
+				verts[i].color.r = brightness;
+				verts[i].color.g = brightness;
+				verts[i].color.b = brightness;
+				verts[i].color.a = 255;
+			}
+
+			/* Render quad as two triangles */
+			int indices[6] = {0, 1, 2, 0, 2, 3};
+			SDL_RenderGeometry(ctx->renderer, ctx->jack_texture, verts, 4, indices, 6);
+		}
+	}
 }
 
 /* Text scroller with SDL_ttf */
