@@ -991,12 +991,12 @@ static void build_control_map(const char *text)
 
 
 /* Apply control codes based on current scroll position */
-static void apply_scroll_controls(DemoContext *ctx, float scroll_offset)
+static void apply_scroll_controls(DemoContext *ctx, float scroll_offset, float total_width)
 {
 	/* Track which control codes have been triggered */
 	static int triggered[256] = {0};
 	static int last_num_codes = 0;
-	static float last_offset = 0.0f;
+	static int last_cycle = -1;
 
 	/* Reset triggered flags if control codes changed */
 	if (num_control_codes != last_num_codes) {
@@ -1005,78 +1005,25 @@ static void apply_scroll_controls(DemoContext *ctx, float scroll_offset)
 		last_num_codes = num_control_codes;
 	}
 
-	/* Reset triggered flags when scroll wraps around (detect by large negative jump) */
-	if (scroll_offset < last_offset - 1000.0f) {  /* Wrapped around */
+	/* Detect wrapping by tracking which cycle we're in */
+	int current_cycle = (int)(scroll_offset / total_width);
+	if (current_cycle != last_cycle && last_cycle >= 0) {
+		/* We've wrapped to a new cycle - reset all triggered flags */
 		for (int i = 0; i < 256; i++)
 			triggered[i] = 0;
-		/* Reset scroll state to defaults on wrap */
-		ctx->scroll_speed = 180.0f;
-		ctx->scroll_style = SCROLL_ROLLER_3D;
-		ctx->scroll_color[0] = 0;
-		ctx->scroll_color[1] = 0;
-		ctx->scroll_color[2] = 0;
-
-		/* Immediately apply control codes at position 0 after wrap */
-		for (int i = 0; i < num_control_codes; i++) {
-			ControlCode *cc = &control_codes[i];
-			if (cc->position == 0) {
-				switch (cc->type) {
-				case 'S':
-					{
-						char *endptr;
-						float new_speed = strtof(cc->data, &endptr);
-						if (endptr != cc->data && new_speed >= 0)
-							ctx->scroll_speed = new_speed;
-					}
-					break;
-				case 'T':
-					if (strcmp(cc->data, "wave") == 0)
-						ctx->scroll_style = SCROLL_SINE_WAVE;
-					else if (strcmp(cc->data, "roller") == 0)
-						ctx->scroll_style = SCROLL_ROLLER_3D;
-					else if (strcmp(cc->data, "bottom") == 0)
-						ctx->scroll_style = SCROLL_BOTTOM_TRADITIONAL;
-					break;
-				case 'C':
-					{
-						int r, g, b;
-						if (sscanf(cc->data, "%d,%d,%d", &r, &g, &b) == 3) {
-							ctx->scroll_color[0] = r;
-							ctx->scroll_color[1] = g;
-							ctx->scroll_color[2] = b;
-						}
-					}
-					break;
-				}
-				triggered[i] = 1;
-			}
-		}
 	}
-	last_offset = scroll_offset;
+	last_cycle = current_cycle;
+
+	/* Calculate scroll position within current cycle */
+	float cycle_offset = fmodf(scroll_offset, total_width);
 
 	/* Apply control codes that we've just reached (not yet triggered) */
 	for (int i = 0; i < num_control_codes; i++) {
 		ControlCode *cc = &control_codes[i];
-		float trigger_offset = 0.0f;
+		float trigger_offset = 500.0f;
 
-		/* Different trigger offsets for different control code types */
-		switch (cc->type) {
-		case 'P':			 /* PAUSE */
-			trigger_offset = 500.0f;
-			break;
-		case 'S':			 /* SPEED */
-			trigger_offset = 500.0f;
-			break;
-		case 'T':			/* STYLE */
-			trigger_offset = 500.0f;
-			break;
-		case 'C':			/* COLOR */
-			trigger_offset = 500.0f;
-			break;
-		}
-
-		/* Trigger when we pass the pixel position plus offset (only once) */
-		if (!triggered[i] && scroll_offset >= cc->pixel_position + trigger_offset) {
+		/* Trigger when we pass the pixel position plus offset (only once per cycle) */
+		if (!triggered[i] && cycle_offset >= cc->pixel_position + trigger_offset) {
 			triggered[i] = 1;
 
 			switch (cc->type) {
@@ -1418,7 +1365,7 @@ void render_scroll_text(DemoContext *ctx)
 		}
 
 		/* Apply control codes based on scroll position */
-		apply_scroll_controls(ctx, ctx->scroll_offset);
+		apply_scroll_controls(ctx, ctx->scroll_offset, total_adv);
 	} else if (ctx->scroll_style == SCROLL_BOTTOM_TRADITIONAL) {
 		/* Traditional bottom scroller - render entire line once */
 		static SDL_Texture *line_tex = NULL;
@@ -1494,7 +1441,7 @@ void render_scroll_text(DemoContext *ctx)
 		}
 
 		/* Apply control codes based on scroll position */
-		apply_scroll_controls(ctx, ctx->scroll_offset);
+		apply_scroll_controls(ctx, ctx->scroll_offset, line_w);
 
 		if (line_tex) {
 			int y_pos = HEIGHT - 60;
