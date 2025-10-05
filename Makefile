@@ -7,7 +7,7 @@ DEBUGFLAGS = -g -O0 -DDEBUG
 
 TARGET     = demo
 SOURCE     = demo.c
-HEADERS    = font_data.h image_data.h logo_data.h
+HEADERS    = font_data.h image_data.h logo_data.h infix_data.h wires_data.h
 
 # Check if music file exists and add to build
 ifneq ($(wildcard music.mod),)
@@ -29,6 +29,14 @@ image_data.h: jack.png
 logo_data.h: logo.png
 	xxd -i logo.png > logo_data.h
 
+# Generate embedded infix data from infix.png
+infix_data.h: infix.png
+	xxd -i infix.png > infix_data.h
+
+# Generate embedded wires data from wires.png
+wires_data.h: wires.png
+	xxd -i wires.png > wires_data.h
+
 # Generate embedded music data from music.mod (if present)
 music_data.h: music.mod
 	xxd -i music.mod > music_data.h
@@ -43,7 +51,7 @@ run: $(TARGET)
 	./$(TARGET)
 
 clean:
-	rm -f $(TARGET) font_data.h image_data.h logo_data.h music_data.h
+	rm -f $(TARGET) font_data.h image_data.h logo_data.h infix_data.h wires_data.h music_data.h
 	rm -rf AppDir appimagetool InfixDemo-x86_64.AppImage
 
 docker-build:

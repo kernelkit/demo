@@ -19,6 +19,8 @@
 #include "font_data.h"
 #include "image_data.h"
 #include "logo_data.h"
+#include "infix_data.h"
+#include "wires_data.h"
 
 /* Music data will be included when available */
 #ifdef HAVE_MUSIC
@@ -65,6 +67,10 @@ typedef struct {
     SDL_Texture *jack_texture;
     SDL_Surface *logo_surface;
     SDL_Texture *logo_texture;
+    SDL_Surface *infix_surface;
+    SDL_Texture *infix_texture;
+    SDL_Surface *wires_surface;
+    SDL_Texture *wires_texture;
     int current_scene;
     int current_scene_index;  /* Index into scene_list */
     int fixed_scene;
@@ -286,6 +292,207 @@ void render_starfield(DemoContext *ctx)
 
 			SDL_SetRenderDrawBlendMode(ctx->renderer, SDL_BLENDMODE_BLEND);
 		}
+	}
+
+	/* Burning Infix logo in upper left corner */
+	if (ctx->infix_texture && ctx->infix_surface) {
+		/* Scale logo to 40% */
+		int orig_w = ctx->infix_surface->w;
+		int orig_h = ctx->infix_surface->h;
+		int logo_w = (int)(orig_w * 0.4f);
+		int logo_h = (int)(orig_h * 0.4f);
+		int logo_x = 20;  /* Upper left corner */
+		int logo_y = 20;
+
+		/* Create fire effect buffer matching logo dimensions */
+		static Uint32 fire_buffer[512 * 256];  /* Fire buffer */
+		static int fire_frame_skip = 0;
+		int fire_w = logo_w;
+		int fire_h = logo_h;
+
+		/* Update fire every 5th frame to slow it down */
+		fire_frame_skip++;
+		if (fire_frame_skip >= 5) {
+			fire_frame_skip = 0;
+
+			/* Randomize bottom row each frame to create fire source */
+			for (int x = 0; x < fire_w; x++) {
+				fire_buffer[(fire_h - 1) * fire_w + x] = rand() % 256;
+			}
+
+			/* Fire propagation - lodev.org algorithm */
+			for (int y = 0; y < fire_h - 1; y++) {
+				for (int x = 0; x < fire_w; x++) {
+					/* Calculate indices with wrapping */
+					int y1 = (y + 1) % fire_h;
+					int y2 = (y + 2) % fire_h;
+					int x_left = (x - 1 + fire_w) % fire_w;
+					int x_right = (x + 1) % fire_w;
+
+					/* Average 4 neighboring pixels with exact formula */
+					int sum = fire_buffer[y1 * fire_w + x_left];   /* Below-left */
+					sum += fire_buffer[y1 * fire_w + x];           /* Below */
+					sum += fire_buffer[y1 * fire_w + x_right];     /* Below-right */
+					sum += fire_buffer[y2 * fire_w + x];           /* Two rows below */
+
+					/* Apply decay: (sum * 32) / 129 */
+					fire_buffer[y * fire_w + x] = (sum * 32) / 129;
+				}
+			}
+		}
+
+		/* Render fire masked by logo - only visible through the letters */
+		float palette_shift = ctx->global_time * 80.0f;
+
+		for (int y = 0; y < fire_h; y++) {
+			for (int x = 0; x < fire_w; x++) {
+				/* Sample logo to see if we should show fire here (logo acts as mask) */
+				int sample_x = (x * orig_w) / logo_w;
+				int sample_y = (y * orig_h) / logo_h;
+				if (sample_x >= orig_w) sample_x = orig_w - 1;
+				if (sample_y >= orig_h) sample_y = orig_h - 1;
+
+				Uint8 *pixel = (Uint8*)ctx->infix_surface->pixels + sample_y * ctx->infix_surface->pitch +
+				               sample_x * ctx->infix_surface->format->BytesPerPixel;
+				Uint32 color;
+				memcpy(&color, pixel, ctx->infix_surface->format->BytesPerPixel);
+				Uint8 r, g, b, a;
+				SDL_GetRGBA(color, ctx->infix_surface->format, &r, &g, &b, &a);
+
+				/* Only render fire where logo has pixels (logo is the window) */
+				if (a > 128) {
+					int heat = fire_buffer[y * fire_w + x];
+					if (heat > 10) {  /* Skip very dim pixels */
+						/* Simple fire palette: dark red -> bright red -> orange -> yellow */
+						int shifted_heat = ((int)(heat + palette_shift)) % 200;  /* Cycle through lower range */
+
+						int fire_r, fire_g, fire_b;
+						if (shifted_heat < 100) {
+							/* Dark red to bright red */
+							fire_r = 128 + (shifted_heat * 127) / 100;
+							fire_g = 0;
+							fire_b = 0;
+						} else {
+							/* Bright red to yellow */
+							fire_r = 255;
+							fire_g = ((shifted_heat - 100) * 255) / 100;
+							fire_b = 0;
+						}
+
+						SDL_Rect pixel_rect = {logo_x + x, logo_y + y, 2, 2};
+
+						SDL_SetRenderDrawBlendMode(ctx->renderer, SDL_BLENDMODE_ADD);
+						SDL_SetRenderDrawColor(ctx->renderer, fire_r, fire_g, fire_b, heat);
+						SDL_RenderFillRect(ctx->renderer, &pixel_rect);
+					}
+				}
+			}
+		}
+
+		/* Optionally draw logo outline on top for definition (with low alpha) */
+		SDL_Rect logo_rect = {logo_x, logo_y, logo_w, logo_h};
+		SDL_SetTextureAlphaMod(ctx->infix_texture, 100);
+		SDL_RenderCopy(ctx->renderer, ctx->infix_texture, NULL, &logo_rect);
+		SDL_SetTextureAlphaMod(ctx->infix_texture, 255);
+	}
+
+	/* Burning Wires logo in upper right corner */
+	if (ctx->wires_texture && ctx->wires_surface) {
+		/* Scale to 50% size for wires logo to fit in window */
+		int orig_w = ctx->wires_surface->w;
+		int orig_h = ctx->wires_surface->h;
+		int logo_w = (int)(orig_w * 0.50f);
+		int logo_h = (int)(orig_h * 0.50f);
+		int logo_x = WIDTH - logo_w - 20;  /* Upper right corner */
+		int logo_y = 20;
+
+		/* Create fire effect buffer matching logo dimensions */
+		static Uint32 wires_fire_buffer[512 * 256];  /* Fire buffer for wires */
+		static int wires_fire_frame_skip = 0;
+		int fire_w = logo_w;
+		int fire_h = logo_h;
+
+		/* Update fire every 5th frame to slow it down */
+		wires_fire_frame_skip++;
+		if (wires_fire_frame_skip >= 5) {
+			wires_fire_frame_skip = 0;
+
+			/* Randomize bottom row each frame to create fire source */
+			for (int x = 0; x < fire_w; x++) {
+				wires_fire_buffer[(fire_h - 1) * fire_w + x] = rand() % 256;
+			}
+
+			/* Fire propagation - lodev.org algorithm */
+			for (int y = 0; y < fire_h - 1; y++) {
+				for (int x = 0; x < fire_w; x++) {
+					/* Calculate indices with wrapping */
+					int y1 = (y + 1) % fire_h;
+					int y2 = (y + 2) % fire_h;
+					int x_left = (x - 1 + fire_w) % fire_w;
+					int x_right = (x + 1) % fire_w;
+
+					/* Average 4 neighboring pixels with exact formula */
+					int sum = wires_fire_buffer[y1 * fire_w + x_left];
+					sum += wires_fire_buffer[y1 * fire_w + x];
+					sum += wires_fire_buffer[y1 * fire_w + x_right];
+					sum += wires_fire_buffer[y2 * fire_w + x];
+
+					/* Apply decay: (sum * 32) / 129 */
+					wires_fire_buffer[y * fire_w + x] = (sum * 32) / 129;
+				}
+			}
+		}
+
+		/* Render fire masked by wires logo */
+		float palette_shift = ctx->global_time * 80.0f;
+
+		for (int y = 0; y < fire_h; y++) {
+			for (int x = 0; x < fire_w; x++) {
+				/* Sample logo - scale coordinates back to original dimensions */
+				int sample_x = (x * orig_w) / logo_w;
+				int sample_y = (y * orig_h) / logo_h;
+				if (sample_x >= orig_w) sample_x = orig_w - 1;
+				if (sample_y >= orig_h) sample_y = orig_h - 1;
+
+				Uint8 *pixel = (Uint8*)ctx->wires_surface->pixels + sample_y * ctx->wires_surface->pitch +
+				               sample_x * ctx->wires_surface->format->BytesPerPixel;
+				Uint32 color;
+				memcpy(&color, pixel, ctx->wires_surface->format->BytesPerPixel);
+				Uint8 r, g, b, a;
+				SDL_GetRGBA(color, ctx->wires_surface->format, &r, &g, &b, &a);
+
+				/* Only render fire where logo has pixels */
+				if (a > 128) {
+					int heat = wires_fire_buffer[y * fire_w + x];
+					if (heat > 10) {
+						int shifted_heat = ((int)(heat + palette_shift)) % 200;
+
+						int fire_r, fire_g, fire_b;
+						if (shifted_heat < 100) {
+							fire_r = 128 + (shifted_heat * 127) / 100;
+							fire_g = 0;
+							fire_b = 0;
+						} else {
+							fire_r = 255;
+							fire_g = ((shifted_heat - 100) * 255) / 100;
+							fire_b = 0;
+						}
+
+						SDL_Rect pixel_rect = {logo_x + x, logo_y + y, 2, 2};
+
+						SDL_SetRenderDrawBlendMode(ctx->renderer, SDL_BLENDMODE_ADD);
+						SDL_SetRenderDrawColor(ctx->renderer, fire_r, fire_g, fire_b, heat);
+						SDL_RenderFillRect(ctx->renderer, &pixel_rect);
+					}
+				}
+			}
+		}
+
+		/* Draw logo outline on top */
+		SDL_Rect logo_rect = {logo_x, logo_y, logo_w, logo_h};
+		SDL_SetTextureAlphaMod(ctx->wires_texture, 100);
+		SDL_RenderCopy(ctx->renderer, ctx->wires_texture, NULL, &logo_rect);
+		SDL_SetTextureAlphaMod(ctx->wires_texture, 255);
 	}
 
 	/* Rotating textured sphere in center with Jack image */
@@ -2444,6 +2651,42 @@ int main(int argc, char *argv[])
 			/* Create and cache the texture */
 			ctx.logo_texture = SDL_CreateTextureFromSurface(ctx.renderer, ctx.logo_surface);
 			SDL_SetTextureBlendMode(ctx.logo_texture, SDL_BLENDMODE_BLEND);
+		}
+	}
+
+	/* Load embedded infix.png from memory */
+	SDL_RWops *infix_rw = SDL_RWFromConstMem(infix_png, infix_png_len);
+	if (!infix_rw) {
+		fprintf(stderr, "Warning: Failed to create RWops for infix: %s\n", SDL_GetError());
+		ctx.infix_texture = NULL;
+		ctx.infix_surface = NULL;
+	} else {
+		ctx.infix_surface = IMG_Load_RW(infix_rw, 1);  /* 1 = automatically close RW */
+		if (!ctx.infix_surface) {
+			fprintf(stderr, "Warning: Failed to load embedded infix: %s\n", IMG_GetError());
+			ctx.infix_texture = NULL;
+		} else {
+			/* Create and cache the texture */
+			ctx.infix_texture = SDL_CreateTextureFromSurface(ctx.renderer, ctx.infix_surface);
+			SDL_SetTextureBlendMode(ctx.infix_texture, SDL_BLENDMODE_BLEND);
+		}
+	}
+
+	/* Load embedded wires.png from memory */
+	SDL_RWops *wires_rw = SDL_RWFromConstMem(wires_png, wires_png_len);
+	if (!wires_rw) {
+		fprintf(stderr, "Warning: Failed to create RWops for wires: %s\n", SDL_GetError());
+		ctx.wires_texture = NULL;
+		ctx.wires_surface = NULL;
+	} else {
+		ctx.wires_surface = IMG_Load_RW(wires_rw, 1);  /* 1 = automatically close RW */
+		if (!ctx.wires_surface) {
+			fprintf(stderr, "Warning: Failed to load embedded wires: %s\n", IMG_GetError());
+			ctx.wires_texture = NULL;
+		} else {
+			/* Create and cache the texture */
+			ctx.wires_texture = SDL_CreateTextureFromSurface(ctx.renderer, ctx.wires_surface);
+			SDL_SetTextureBlendMode(ctx.wires_texture, SDL_BLENDMODE_BLEND);
 		}
 	}
 
