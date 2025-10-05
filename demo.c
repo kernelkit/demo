@@ -37,7 +37,8 @@ typedef enum {
     SCROLL_NONE,
     SCROLL_SINE_WAVE,
     SCROLL_CLASSIC,
-    SCROLL_ROLLER_3D
+    SCROLL_ROLLER_3D,
+    SCROLL_BOUNCE
 } ScrollStyle;
 
 typedef struct {
@@ -1054,6 +1055,8 @@ static void apply_scroll_controls(DemoContext *ctx, float scroll_offset, float t
 					ctx->scroll_style = SCROLL_ROLLER_3D;
 				else if (strcmp(cc->data, "classic") == 0)
 					ctx->scroll_style = SCROLL_CLASSIC;
+				else if (strcmp(cc->data, "bounce") == 0)
+					ctx->scroll_style = SCROLL_BOUNCE;
 				break;
 
 			case 'C': /* COLOR */
@@ -1177,7 +1180,7 @@ void render_scroll_text(DemoContext *ctx)
 		ctx->scroll_offset += ctx->scroll_speed * delta_time;
 	}
 
-	if (ctx->scroll_style == SCROLL_SINE_WAVE || ctx->scroll_style == SCROLL_ROLLER_3D) {
+	if (ctx->scroll_style == SCROLL_SINE_WAVE || ctx->scroll_style == SCROLL_ROLLER_3D || ctx->scroll_style == SCROLL_BOUNCE) {
 		/* Glyph cache with metrics */
 		typedef struct {
 			SDL_Texture *tex;
@@ -1344,6 +1347,21 @@ void render_scroll_text(DemoContext *ctx)
 					SDL_RenderCopy(ctx->renderer, gcache[ch].tex, NULL, &glow);
 					SDL_SetTextureAlphaMod(gcache[ch].tex, 255);
 					SDL_SetTextureBlendMode(gcache[ch].tex, SDL_BLENDMODE_BLEND);
+				} else if (ctx->scroll_style == SCROLL_BOUNCE) {
+					/* Bouncing characters - each char bounces independently */
+					float bounce_phase = ctx->global_time * 4.0f + i * 0.5f;
+					/* Use abs(sin) to create bounce pattern (always positive) */
+					float bounce_height = fabsf(sinf(bounce_phase)) * 60.0f;
+					/* Add slight squash at bottom */
+					float squash = 1.0f - (1.0f - fabsf(sinf(bounce_phase))) * 0.15f;
+
+					int bounce_y = HEIGHT / 2 - (int)bounce_height;
+					int dw = gcache[ch].w;
+					int dh = (int)(gcache[ch].h * squash);
+
+					SDL_SetTextureColorMod(gcache[ch].tex, r, g, b);
+					SDL_Rect dest = {(int)char_x, bounce_y - dh / 2, dw, dh};
+					SDL_RenderCopy(ctx->renderer, gcache[ch].tex, NULL, &dest);
 				} else {
 					/* Simple sine wave */
 					SDL_SetTextureColorMod(gcache[ch].tex, r, g, b);
