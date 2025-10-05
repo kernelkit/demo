@@ -75,7 +75,7 @@ typedef struct {
     ScrollStyle scroll_style;
     Star stars[NUM_STARS];
     Uint32 scene_duration;  /* Milliseconds per scene */
-    int scene_list[6];      /* Custom scene order */
+    int scene_list[16];     /* Custom scene order */
     int num_scenes;         /* Number of scenes in list */
     char *scroll_text;      /* Dynamically loaded scroll text */
     /* Scroll control state */
@@ -671,6 +671,386 @@ void render_star_ball(DemoContext *ctx)
 	SDL_UpdateTexture(ctx->texture, NULL, ctx->pixels, WIDTH * sizeof(Uint32));
 	SDL_RenderClear(ctx->renderer);
 	SDL_RenderCopy(ctx->renderer, ctx->texture, NULL, NULL);
+}
+
+/* Rotozoomer effect with texture rotation and zoom */
+void render_rotozoomer(DemoContext *ctx)
+{
+	/* Clear to black */
+	for (int i = 0; i < WIDTH * HEIGHT; i++) {
+		ctx->pixels[i] = 0xFF000000;
+	}
+
+	if (!ctx->jack_surface) {
+		SDL_UpdateTexture(ctx->texture, NULL, ctx->pixels, WIDTH * sizeof(Uint32));
+		SDL_RenderClear(ctx->renderer);
+		SDL_RenderCopy(ctx->renderer, ctx->texture, NULL, NULL);
+		return;
+	}
+
+	float t = ctx->time;
+
+	/* Rotation angle and zoom factor */
+	float angle = t * 0.5f;
+	float zoom = 1.5f + sinf(t * 0.7f) * 0.8f;  /* Breathing zoom */
+
+	/* Center point with drift */
+	float center_x = WIDTH / 2.0f + sinf(t * 0.3f) * 40.0f;
+	float center_y = HEIGHT / 2.0f + cosf(t * 0.4f) * 30.0f;
+
+	/* Precompute rotation matrix */
+	float cos_a = cosf(angle);
+	float sin_a = sinf(angle);
+
+	int tex_w = ctx->jack_surface->w;
+	int tex_h = ctx->jack_surface->h;
+
+	/* Render rotozoomer */
+	for (int y = 0; y < HEIGHT; y++) {
+		for (int x = 0; x < WIDTH; x++) {
+			/* Translate to center */
+			float dx = (x - center_x) / zoom;
+			float dy = (y - center_y) / zoom;
+
+			/* Rotate */
+			float u = dx * cos_a - dy * sin_a;
+			float v = dx * sin_a + dy * cos_a;
+
+			/* Translate to texture space and wrap */
+			int tx = ((int)(u + tex_w / 2.0f) % tex_w + tex_w) % tex_w;
+			int ty = ((int)(v + tex_h / 2.0f) % tex_h + tex_h) % tex_h;
+
+			/* Sample texture */
+			Uint32 color = get_jack_pixel(ctx->jack_surface, tx, ty);
+			ctx->pixels[y * WIDTH + x] = color;
+		}
+	}
+
+	SDL_UpdateTexture(ctx->texture, NULL, ctx->pixels, WIDTH * sizeof(Uint32));
+	SDL_RenderClear(ctx->renderer);
+	SDL_RenderCopy(ctx->renderer, ctx->texture, NULL, NULL);
+
+	/* Starball temporarily disabled - hard to see with Jack background */
+	#if 0
+	/* Now render the bouncing starball on top */
+	/* Extract starball rendering code inline */
+	#define NUM_BALL_STARS 200
+	static float sphere_points[NUM_BALL_STARS][3];
+	static int initialized = 0;
+	static float ball_x = 400.0f;
+	static float ball_y = 300.0f;
+	static float vel_x = 3.0f;
+	static float vel_y = 2.5f;
+	static float squash_x = 1.0f;
+	static float squash_y = 1.0f;
+
+	if (!initialized) {
+		/* Generate points on sphere using fibonacci spiral */
+		float phi = (1.0f + sqrtf(5.0f)) / 2.0f;  /* Golden ratio */
+		for (int i = 0; i < NUM_BALL_STARS; i++) {
+			float t = (float)i / NUM_BALL_STARS;
+			float inc = acosf(1.0f - 2.0f * t);
+			float azi = 2.0f * PI * i / phi;
+
+			sphere_points[i][0] = sinf(inc) * cosf(azi);
+			sphere_points[i][1] = sinf(inc) * sinf(azi);
+			sphere_points[i][2] = cosf(inc);
+		}
+		initialized = 1;
+	}
+
+	/* Update ball position with physics */
+	ball_x += vel_x;
+	ball_y += vel_y;
+
+	float radius = 80.0f;
+	float squash_intensity = 0.15f;
+	float recovery_speed = 0.2f;
+
+	/* Bounce off edges with squash */
+	if (ball_x - radius < 0 || ball_x + radius > WIDTH) {
+		vel_x = -vel_x;
+		ball_x = (ball_x < WIDTH / 2) ? radius : WIDTH - radius;
+		squash_x = 1.0f - squash_intensity;
+		squash_y = 1.0f + squash_intensity;
+	}
+	if (ball_y - radius < 0 || ball_y + radius > HEIGHT) {
+		vel_y = -vel_y;
+		ball_y = (ball_y < HEIGHT / 2) ? radius : HEIGHT - radius;
+		squash_y = 1.0f - squash_intensity;
+		squash_x = 1.0f + squash_intensity;
+	}
+
+	/* Recover to normal shape */
+	squash_x += (1.0f - squash_x) * recovery_speed;
+	squash_y += (1.0f - squash_y) * recovery_speed;
+
+	/* Rotation angles */
+	float rot_x = ctx->time * 0.7f;
+	float rot_y = ctx->time * 0.5f;
+	float rot_z = ctx->time * 0.3f;
+
+	/* Render sphere points with additive blending */
+	SDL_SetRenderDrawBlendMode(ctx->renderer, SDL_BLENDMODE_ADD);
+
+	for (int i = 0; i < NUM_BALL_STARS; i++) {
+		float x = sphere_points[i][0] * radius;
+		float y = sphere_points[i][1] * radius;
+		float z = sphere_points[i][2] * radius;
+
+		/* Apply squash and stretch */
+		x *= squash_x;
+		y *= squash_y;
+
+		/* Rotate around X axis */
+		float y1 = y * cosf(rot_x) - z * sinf(rot_x);
+		float z1 = y * sinf(rot_x) + z * cosf(rot_x);
+		y = y1;
+		z = z1;
+
+		/* Rotate around Y axis */
+		float x1 = x * cosf(rot_y) + z * sinf(rot_y);
+		z1 = -x * sinf(rot_y) + z * cosf(rot_y);
+		x = x1;
+		z = z1;
+
+		/* Rotate around Z axis */
+		float x2 = x * cosf(rot_z) - y * sinf(rot_z);
+		float y2 = x * sinf(rot_z) + y * cosf(rot_z);
+		x = x2;
+		y = y2;
+
+		/* Project to 2D */
+		float depth = 200.0f / (200.0f + z);
+		int sx = (int)(ball_x + x * depth);
+		int sy = (int)(ball_y + y * depth);
+
+		/* Color based on depth (closer = brighter) */
+		int brightness = (int)(128 + 127 * depth);
+		if (brightness < 0) brightness = 0;
+		if (brightness > 255) brightness = 255;
+
+		/* Draw star with glow effect */
+		if (sx >= 1 && sx < WIDTH - 1 && sy >= 1 && sy < HEIGHT - 1) {
+			/* Larger stars for closer points with glow */
+			if (z > 0) {
+				SDL_SetRenderDrawColor(ctx->renderer, brightness, brightness, brightness, 255);
+				/* Draw cross pattern for glow */
+				SDL_RenderDrawPoint(ctx->renderer, sx, sy);
+				SDL_RenderDrawPoint(ctx->renderer, sx - 1, sy);
+				SDL_RenderDrawPoint(ctx->renderer, sx + 1, sy);
+				SDL_RenderDrawPoint(ctx->renderer, sx, sy - 1);
+				SDL_RenderDrawPoint(ctx->renderer, sx, sy + 1);
+			} else {
+				SDL_SetRenderDrawColor(ctx->renderer, brightness, brightness, brightness, 255);
+				SDL_RenderDrawPoint(ctx->renderer, sx, sy);
+			}
+		}
+	}
+
+	SDL_SetRenderDrawBlendMode(ctx->renderer, SDL_BLENDMODE_BLEND);
+	#endif  /* Starball disabled */
+}
+
+/* Checkered floor perspective effect */
+void render_checkered_floor(DemoContext *ctx)
+{
+	/* Clear to dark blue/purple sky gradient */
+	for (int y = 0; y < HEIGHT; y++) {
+		int r = 0;
+		int g = (int)(20 + (y / (float)HEIGHT) * 30);
+		int b = (int)(40 + (y / (float)HEIGHT) * 60);
+		Uint32 color = 0xFF000000 | (r << 16) | (g << 8) | b;
+		for (int x = 0; x < WIDTH; x++) {
+			ctx->pixels[y * WIDTH + x] = color;
+		}
+	}
+
+	/* Floor parameters */
+	float horizon_y = HEIGHT * 0.6f;  /* Horizon line - upper part of screen */
+	float floor_z_far = 50.0f;        /* Far distance */
+	float tile_size = 0.8f;           /* Checkerboard tile size for floor casting */
+
+	/* Floor casting with proper scrolling (based on lodev.org algorithm) */
+
+	/* Camera/player position for scrolling */
+	static float posX = 0.0f;
+	static float posY = 0.0f;
+	posY += 3.0f * 0.016f;  /* Scroll forward - slower to match ball */
+
+	/* Camera direction (looking straight ahead) */
+	float dirX = 0.0f;
+	float dirY = 1.0f;
+
+	/* Camera plane (for FOV) */
+	float planeX = 0.66f;
+	float planeY = 0.0f;
+
+	for (int y = (int)horizon_y; y < HEIGHT; y++) {
+		/* Ray directions for leftmost and rightmost rays */
+		float rayDirX0 = dirX - planeX;
+		float rayDirY0 = dirY - planeY;
+		float rayDirX1 = dirX + planeX;
+		float rayDirY1 = dirY + planeY;
+
+		/* Calculate row distance (vertical screen position to floor distance) */
+		int p = y - HEIGHT / 2;
+
+		/* Skip the center horizon line to avoid division by zero */
+		if (p == 0) continue;
+
+		float posZ = 0.5f * HEIGHT;
+		float rowDistance = posZ / p;
+
+		/* Calculate floor step (how much texture coords change per screen X pixel) */
+		float floorStepX = rowDistance * (rayDirX1 - rayDirX0) / WIDTH;
+		float floorStepY = rowDistance * (rayDirY1 - rayDirY0) / WIDTH;
+
+		/* Starting floor position for this row */
+		float floorX = posX + rowDistance * rayDirX0;
+		float floorY = posY + rowDistance * rayDirY0;
+
+		for (int x = 0; x < WIDTH; x++) {
+			/* Get checkerboard tile coordinates */
+			/* Add small offset at center to avoid symmetry artifacts */
+			float checkX = floorX;
+			if (x == WIDTH / 2) checkX += 0.01f;
+
+			int cellX = (int)floorf(checkX / tile_size);
+			int cellY = (int)floorf(floorY / tile_size);
+
+			/* Checkerboard pattern */
+			int checker = (cellX + cellY) & 1;
+
+			/* Distance fog */
+			float fog = 1.0f - fminf(rowDistance / floor_z_far, 0.7f);
+
+			int brightness = checker ? (int)(255 * fog) : (int)(50 * fog);
+
+			Uint32 color = 0xFF000000 | (brightness << 16) | (brightness << 8) | brightness;
+			ctx->pixels[y * WIDTH + x] = color;
+
+			/* Advance to next pixel */
+			floorX += floorStepX;
+			floorY += floorStepY;
+		}
+	}
+
+	SDL_UpdateTexture(ctx->texture, NULL, ctx->pixels, WIDTH * sizeof(Uint32));
+	SDL_RenderClear(ctx->renderer);
+	SDL_RenderCopy(ctx->renderer, ctx->texture, NULL, NULL);
+
+	/* Now render the bouncing starball on top */
+	#define NUM_FLOOR_BALL_STARS 200
+	static float sphere_points[NUM_FLOOR_BALL_STARS][3];
+	static int initialized = 0;
+	static float ball_x = 400.0f;
+	static float ball_y = 0.0f;   /* Will be set above horizon on first run */
+	static float vel_x = 2.0f;    /* Calmer horizontal movement */
+	static float vel_y = 0.0f;  /* Vertical velocity for bounce */
+
+	if (!initialized) {
+		/* Generate points on sphere using fibonacci spiral */
+		float phi = (1.0f + sqrtf(5.0f)) / 2.0f;  /* Golden ratio */
+		for (int i = 0; i < NUM_FLOOR_BALL_STARS; i++) {
+			float t = (float)i / NUM_FLOOR_BALL_STARS;
+			float inc = acosf(1.0f - 2.0f * t);
+			float azi = 2.0f * PI * i / phi;
+
+			sphere_points[i][0] = sinf(inc) * cosf(azi);
+			sphere_points[i][1] = sinf(inc) * sinf(azi);
+			sphere_points[i][2] = cosf(inc);
+		}
+		ball_y = horizon_y - 100.0f;  /* Initialize well above horizon */
+		vel_y = -300.0f;  /* Give it initial upward velocity to start bouncing */
+		initialized = 1;
+	}
+
+	float radius = 70.0f;         /* Bigger ball */
+	float gravity = 1000.0f;      /* Stronger gravity for livelier bounces */
+	float bounce_damping = 0.85f; /* Less damping = bouncier */
+
+	/* Update physics */
+	vel_y += gravity * 0.016f;  /* Apply gravity */
+	ball_y += vel_y * 0.016f;
+
+	/* Bounce on floor - the floor is at the horizon line */
+	if (ball_y + radius > horizon_y) {
+		ball_y = horizon_y - radius;
+		vel_y = -vel_y * bounce_damping;
+		/* Add a small energy boost to keep it bouncing forever */
+		if (fabsf(vel_y) < 500.0f) {
+			vel_y -= 100.0f;  /* Add upward velocity if bounce is getting weak */
+		}
+	}
+
+	/* Move horizontally */
+	ball_x += vel_x;
+
+	/* Bounce off screen left/right edges */
+	if (ball_x - radius < 0 || ball_x + radius > WIDTH) {
+		vel_x = -vel_x;
+		ball_x = (ball_x < WIDTH / 2) ? radius : WIDTH - radius;
+	}
+
+	/* Rotation angles - calmer spin */
+	float rot_x = ctx->time * 0.6f;
+	float rot_y = ctx->time * 0.5f;
+	float rot_z = ctx->time * 0.3f;
+
+	/* Render sphere points with additive blending */
+	SDL_SetRenderDrawBlendMode(ctx->renderer, SDL_BLENDMODE_ADD);
+
+	for (int i = 0; i < NUM_FLOOR_BALL_STARS; i++) {
+		float x = sphere_points[i][0] * radius;
+		float y = sphere_points[i][1] * radius;
+		float z = sphere_points[i][2] * radius;
+
+		/* Rotate around X axis */
+		float y1 = y * cosf(rot_x) - z * sinf(rot_x);
+		float z1 = y * sinf(rot_x) + z * cosf(rot_x);
+		y = y1;
+		z = z1;
+
+		/* Rotate around Y axis */
+		float x1 = x * cosf(rot_y) + z * sinf(rot_y);
+		z1 = -x * sinf(rot_y) + z * cosf(rot_y);
+		x = x1;
+		z = z1;
+
+		/* Rotate around Z axis */
+		float x2 = x * cosf(rot_z) - y * sinf(rot_z);
+		float y2 = x * sinf(rot_z) + y * cosf(rot_z);
+		x = x2;
+		y = y2;
+
+		/* Project to 2D */
+		float depth = 200.0f / (200.0f + z);
+		int sx = (int)(ball_x + x * depth);
+		int sy = (int)(ball_y + y * depth);
+
+		/* Color based on depth */
+		int brightness = (int)(150 + 105 * depth);
+		if (brightness < 0) brightness = 0;
+		if (brightness > 255) brightness = 255;
+
+		/* Draw star with glow */
+		if (sx >= 1 && sx < WIDTH - 1 && sy >= 1 && sy < HEIGHT - 1) {
+			if (z > 0) {
+				SDL_SetRenderDrawColor(ctx->renderer, brightness, brightness, brightness, 255);
+				SDL_RenderDrawPoint(ctx->renderer, sx, sy);
+				SDL_RenderDrawPoint(ctx->renderer, sx - 1, sy);
+				SDL_RenderDrawPoint(ctx->renderer, sx + 1, sy);
+				SDL_RenderDrawPoint(ctx->renderer, sx, sy - 1);
+				SDL_RenderDrawPoint(ctx->renderer, sx, sy + 1);
+			} else {
+				SDL_SetRenderDrawColor(ctx->renderer, brightness, brightness, brightness, 255);
+				SDL_RenderDrawPoint(ctx->renderer, sx, sy);
+			}
+		}
+	}
+
+	SDL_SetRenderDrawBlendMode(ctx->renderer, SDL_BLENDMODE_BLEND);
 }
 
 /* Bouncing logo effect with squash and stretch */
@@ -1496,8 +1876,8 @@ static int usage(int rc)
 	printf("  -h, --help         Show this help message\n");
 	printf("\nScenes:\n");
 	printf("  0 - Starfield      3 - Tunnel           6 - 3D Star Ball\n");
-	printf("  1 - Plasma         4 - Bouncing Logo\n");
-	printf("  2 - Cube           5 - Raining Logo\n");
+	printf("  1 - Plasma         4 - Bouncing Logo    7 - Rotozoomer\n");
+	printf("  2 - Cube           5 - Raining Logo     8 - Checkered Floor\n");
 	printf("\nExamples:\n");
 	printf("  demo -f              # Fullscreen, auto-cycle scenes\n");
 	printf("  demo -s 2            # 2x window size (1600x1200)\n");
@@ -1602,12 +1982,12 @@ int main(int argc, char *argv[])
 	/* Parse non-option arguments as scene numbers */
 	for (int i = optind; i < argc; i++) {
 		int scene = atoi(argv[i]);
-		if (scene >= 0 && scene <= 6) {
+		if (scene >= 0 && scene <= 8) {
 			if (num_scenes < 7) {
 				scene_list[num_scenes++] = scene;
 			}
 		} else {
-			fprintf(stderr, "Error: Invalid scene number '%s'. Use 0-6.\n", argv[i]);
+			fprintf(stderr, "Error: Invalid scene number '%s'. Use 0-8.\n", argv[i]);
 			return 1;
 		}
 	}
@@ -1701,14 +2081,15 @@ int main(int argc, char *argv[])
 		ctx.current_scene_index = 0;
 		ctx.current_scene = ctx.scene_list[0];
 	} else {
-		/* No scenes specified - use default list (skip scene 4) */
+		/* No scenes specified - use default list (skip scenes 4 and 7) */
 		ctx.scene_list[0] = 0;
 		ctx.scene_list[1] = 1;
 		ctx.scene_list[2] = 2;
 		ctx.scene_list[3] = 3;
 		ctx.scene_list[4] = 5;
 		ctx.scene_list[5] = 6;
-		ctx.num_scenes = 6;
+		ctx.scene_list[6] = 8;
+		ctx.num_scenes = 7;
 		ctx.current_scene_index = 0;
 		ctx.current_scene = ctx.scene_list[0];
 	}
@@ -1983,6 +2364,14 @@ int main(int argc, char *argv[])
 			break;
 		case 6:
 			render_star_ball(&ctx);
+			render_scroll_text(&ctx);
+			break;
+		case 7:
+			render_rotozoomer(&ctx);
+			render_scroll_text(&ctx);
+			break;
+		case 8:
+			render_checkered_floor(&ctx);
 			render_scroll_text(&ctx);
 			break;
 		}
