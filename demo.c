@@ -84,6 +84,7 @@ typedef struct {
     Uint8 scroll_color[3];  /* Current scroll color (RGB) */
     float scroll_offset;    /* Accumulated scroll offset */
     float last_frame_time;  /* Time of last frame for delta calculation */
+    int roller_effect;      /* Roller text effect: 0=all, 1=no outline, 2=no outline/glow, 3=color outline */
 } DemoContext;
 
 /* Plasma effect - optimized with lower resolution and LUT */
@@ -1703,30 +1704,40 @@ void render_scroll_text(DemoContext *ctx)
 					int dh = (int)(gcache[ch].h * scale);
 					SDL_Rect dest = {(int)char_x, y_pos - dh / 2, dw, dh};
 
-					/* Outline behind */
-					if (gcache[ch].tex_outline) {
-						SDL_SetTextureColorMod(gcache[ch].tex_outline, 0, 0, 0);
-						SDL_Rect od = dest;
-						od.x -= 1;
-						od.y -= 1;
-						SDL_RenderCopy(ctx->renderer, gcache[ch].tex_outline, NULL, &od);
+					/* Outline behind (configurable) */
+					if (ctx->roller_effect == 0 || ctx->roller_effect == 3) {
+						if (gcache[ch].tex_outline) {
+							if (ctx->roller_effect == 3) {
+								/* Color outline (thicker text effect) */
+								SDL_SetTextureColorMod(gcache[ch].tex_outline, r, g, b);
+							} else {
+								/* Black outline (drop shadow) */
+								SDL_SetTextureColorMod(gcache[ch].tex_outline, 0, 0, 0);
+							}
+							SDL_Rect od = dest;
+							od.x -= 1;
+							od.y -= 1;
+							SDL_RenderCopy(ctx->renderer, gcache[ch].tex_outline, NULL, &od);
+						}
 					}
 
 					/* Main glyph with color */
 					SDL_SetTextureColorMod(gcache[ch].tex, r, g, b);
 					SDL_RenderCopy(ctx->renderer, gcache[ch].tex, NULL, &dest);
 
-					/* Soft glow (additive, slightly larger, low alpha) */
-					SDL_SetTextureBlendMode(gcache[ch].tex, SDL_BLENDMODE_ADD);
-					SDL_SetTextureAlphaMod(gcache[ch].tex, 40);
-					SDL_Rect glow = dest;
-					glow.x -= 2;
-					glow.y -= 2;
-					glow.w += 4;
-					glow.h += 4;
-					SDL_RenderCopy(ctx->renderer, gcache[ch].tex, NULL, &glow);
-					SDL_SetTextureAlphaMod(gcache[ch].tex, 255);
-					SDL_SetTextureBlendMode(gcache[ch].tex, SDL_BLENDMODE_BLEND);
+					/* Soft glow (configurable) */
+					if (ctx->roller_effect != 2) {
+						SDL_SetTextureBlendMode(gcache[ch].tex, SDL_BLENDMODE_ADD);
+						SDL_SetTextureAlphaMod(gcache[ch].tex, 40);
+						SDL_Rect glow = dest;
+						glow.x -= 2;
+						glow.y -= 2;
+						glow.w += 4;
+						glow.h += 4;
+						SDL_RenderCopy(ctx->renderer, gcache[ch].tex, NULL, &glow);
+						SDL_SetTextureAlphaMod(gcache[ch].tex, 255);
+						SDL_SetTextureBlendMode(gcache[ch].tex, SDL_BLENDMODE_BLEND);
+					}
 				} else if (ctx->scroll_style == SCROLL_BOUNCE) {
 					/* Bouncing characters - each char bounces independently */
 					float bounce_phase = ctx->global_time * 4.0f + i * 0.5f;
@@ -1873,6 +1884,7 @@ static int usage(int rc)
 	printf("\nPlayback Options:\n");
 	printf("  -d, --duration SEC Scene duration in seconds (default: 15)\n");
 	printf("  -t, --text FILE    Load scroll text from file\n");
+	printf("  -r, --roller N     Roller effect: 0=all, 1=no outline, 2=clean, 3=color (default: 1)\n");
 	printf("  -h, --help         Show this help message\n");
 	printf("\nScenes:\n");
 	printf("  0 - Starfield      3 - Tunnel           6 - 3D Star Ball\n");
@@ -1902,9 +1914,9 @@ int main(int argc, char *argv[])
 	int scene_duration = 15000;  /* Default: 15 seconds per scene */
 
 	/* Default scroll text */
-	const char *default_text = "Infix OS - The Container demo"
+	const char *default_text = "Infix OS - The Container demo{PAUSE:2}"
 		"    *** Greetings to the demoscene <3"
-		"    *** API first: NETCONF + RESTCONF"
+		"    *** Infix is API first: NETCONF + RESTCONF"
 		"    *** Say Hi to our mascot, Jack! :-)"
 		"    *** YANG is the real HERO tho ..."
 		"    *** Sponsored by Wires in Westeros"
@@ -1921,11 +1933,13 @@ int main(int argc, char *argv[])
 		{"window",     required_argument, NULL, 'w'},
 		{"scale",      required_argument, NULL, 's'},
 		{"text",       required_argument, NULL, 't'},
+		{"roller",     required_argument, NULL, 'r'},
 		{NULL,         0,                 NULL, 0}
 	};
 
 	int opt;
-	while ((opt = getopt_long(argc, argv, "hd:fw:s:t:", long_options, NULL)) != -1) {
+	int roller_effect = 1;  /* Default: no outline, glow only */
+	while ((opt = getopt_long(argc, argv, "hd:fw:s:t:r:", long_options, NULL)) != -1) {
 		switch (opt) {
 		case 'h':
 			return usage(0);
@@ -1972,6 +1986,18 @@ int main(int argc, char *argv[])
 
 		case 't':
 			scroll_file_path = optarg;
+			break;
+
+		case 'r':
+			roller_effect = atoi(optarg);
+			if (roller_effect < 0 || roller_effect > 3) {
+				fprintf(stderr, "Error: Invalid roller effect '%s'. Must be 0-3:\n", optarg);
+				fprintf(stderr, "  0 = All effects (outline + glow)\n");
+				fprintf(stderr, "  1 = No outline (glow only)\n");
+				fprintf(stderr, "  2 = No outline/glow (clean)\n");
+				fprintf(stderr, "  3 = Colored outline (thicker text)\n");
+				return 1;
+			}
 			break;
 
 		default:
@@ -2033,6 +2059,7 @@ int main(int argc, char *argv[])
 	ctx.scroll_style = SCROLL_ROLLER_3D;  /* Default scroll style */
 	ctx.scroll_offset = 0.0f;
 	ctx.last_frame_time = 0.0f;
+	ctx.roller_effect = roller_effect;
 
 	/* Load scroll text from file or use default */
 	if (scroll_file_path) {
