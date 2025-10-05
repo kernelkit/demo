@@ -191,6 +191,110 @@ void render_starfield(DemoContext *ctx)
 		}
 	}
 
+	/* Periodic particle bursts from center */
+	static float last_burst_time = -999.0f;
+	static int burst_style = 0;
+	float burst_interval = 2.5f;  /* Burst every 2.5 seconds */
+	int cx = WIDTH / 2;
+	int cy = HEIGHT / 2;
+
+	/* Trigger new burst periodically */
+	if (ctx->global_time - last_burst_time > burst_interval) {
+		last_burst_time = ctx->global_time;
+		burst_style = (burst_style + 1) % 3;  /* Cycle through 3 styles */
+	}
+
+	float time_since_burst = ctx->global_time - last_burst_time;
+
+	/* Only draw particles during active burst (first 2 seconds) */
+	if (time_since_burst < 2.0f) {
+		int num_particles = 80;
+
+		for (int i = 0; i < num_particles; i++) {
+			float angle, radius, px_f, py_f;
+			int px, py, r, g, b;
+			float life = 1.0f - (time_since_burst / 2.0f);
+			if (life < 0.0f) life = 0.0f;
+
+			if (burst_style == 0) {
+				/* Style 0: Radial explosion (rainbow) */
+				angle = (i / (float)num_particles) * 2 * PI;
+				float speed = 150.0f + (i % 20) * 10.0f;
+				radius = speed * time_since_burst;
+				px = cx + (int)(radius * cosf(angle));
+				py = cy + (int)(radius * sinf(angle));
+
+				float hue = angle / (2 * PI);
+				r = (int)(255 * life * (0.5f + 0.5f * sinf(hue * 2 * PI)));
+				g = (int)(255 * life * (0.5f + 0.5f * sinf(hue * 2 * PI + 2 * PI / 3)));
+				b = (int)(255 * life * (0.5f + 0.5f * sinf(hue * 2 * PI + 4 * PI / 3)));
+			} else if (burst_style == 1) {
+				/* Style 1: Spiral outward (cyan/blue) */
+				angle = (i / (float)num_particles) * 2 * PI;
+				float spiral_speed = 100.0f;
+				radius = spiral_speed * time_since_burst;
+				float spiral_rotation = time_since_burst * 3.0f;  /* Spiral effect */
+				px = cx + (int)(radius * cosf(angle + spiral_rotation));
+				py = cy + (int)(radius * sinf(angle + spiral_rotation));
+
+				r = (int)(100 * life);
+				g = (int)(220 * life);
+				b = (int)(255 * life);
+			} else {
+				/* Style 2: Ring expansion (orange/red) */
+				angle = (i / (float)num_particles) * 2 * PI;
+				/* Multiple concentric rings */
+				int ring = i % 4;
+				float ring_delay = ring * 0.15f;
+				float ring_time = time_since_burst - ring_delay;
+				if (ring_time < 0.0f) ring_time = 0.0f;
+
+				radius = 120.0f * ring_time;
+				px = cx + (int)(radius * cosf(angle));
+				py = cy + (int)(radius * sinf(angle));
+
+				/* Adjust life based on ring delay */
+				float ring_life = 1.0f - (ring_time / 1.8f);
+				if (ring_life < 0.0f) ring_life = 0.0f;
+
+				r = (int)(255 * ring_life);
+				g = (int)(150 * ring_life);
+				b = (int)(50 * ring_life);
+			}
+
+			/* Draw particle with glow */
+			for (int dy = -2; dy <= 2; dy++) {
+				for (int dx = -2; dx <= 2; dx++) {
+					int x = px + dx;
+					int y = py + dy;
+
+					if (x >= 0 && x < WIDTH && y >= 0 && y < HEIGHT) {
+						float dist = sqrtf(dx * dx + dy * dy);
+						if (dist <= 2.0f) {
+							float glow = (1.0f - dist / 2.0f) * 0.7f;
+
+							int pr = (int)(r * glow);
+							int pg = (int)(g * glow);
+							int pb = (int)(b * glow);
+
+							/* Blend with existing pixel */
+							Uint32 existing = ctx->pixels[y * WIDTH + x];
+							int er = (existing >> 16) & 0xFF;
+							int eg = (existing >> 8) & 0xFF;
+							int eb = existing & 0xFF;
+
+							int nr = (pr + er > 255) ? 255 : pr + er;
+							int ng = (pg + eg > 255) ? 255 : pg + eg;
+							int nb = (pb + eb > 255) ? 255 : pb + eb;
+
+							ctx->pixels[y * WIDTH + x] = 0xFF000000 | (nr << 16) | (ng << 8) | nb;
+						}
+					}
+				}
+			}
+		}
+	}
+
 	/* Update texture */
 	SDL_UpdateTexture(ctx->texture, NULL, ctx->pixels, WIDTH * sizeof(Uint32));
 	SDL_RenderClear(ctx->renderer);
