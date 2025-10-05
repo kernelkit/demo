@@ -1,4 +1,4 @@
-{SPEED:400}{STYLE:bottom}
+{SPEED:400}{STYLE:classic}
 
 
 

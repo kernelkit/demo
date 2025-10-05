@@ -1,4 +1,4 @@
-{STYLE:bottom}Welcome to...   the Infix Demo!{PAUSE:2}
+{STYLE:classic}Welcome to...   the Infix Demo!{PAUSE:2}
 
 
 

@@ -36,7 +36,7 @@ static int HEIGHT = 600;
 typedef enum {
     SCROLL_NONE,
     SCROLL_SINE_WAVE,
-    SCROLL_BOTTOM_TRADITIONAL,
+    SCROLL_CLASSIC,
     SCROLL_ROLLER_3D
 } ScrollStyle;
 
@@ -1052,8 +1052,8 @@ static void apply_scroll_controls(DemoContext *ctx, float scroll_offset, float t
 					ctx->scroll_style = SCROLL_SINE_WAVE;
 				else if (strcmp(cc->data, "roller") == 0)
 					ctx->scroll_style = SCROLL_ROLLER_3D;
-				else if (strcmp(cc->data, "bottom") == 0)
-					ctx->scroll_style = SCROLL_BOTTOM_TRADITIONAL;
+				else if (strcmp(cc->data, "classic") == 0)
+					ctx->scroll_style = SCROLL_CLASSIC;
 				break;
 
 			case 'C': /* COLOR */
@@ -1366,8 +1366,8 @@ void render_scroll_text(DemoContext *ctx)
 
 		/* Apply control codes based on scroll position */
 		apply_scroll_controls(ctx, ctx->scroll_offset, total_adv);
-	} else if (ctx->scroll_style == SCROLL_BOTTOM_TRADITIONAL) {
-		/* Traditional bottom scroller - render entire line once */
+	} else if (ctx->scroll_style == SCROLL_CLASSIC) {
+		/* Classic bottom scroller - render entire line once */
 		static SDL_Texture *line_tex = NULL;
 		static int line_w = 0;
 		static const char *last_display_text = NULL;
