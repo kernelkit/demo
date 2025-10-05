@@ -1,0 +1,20 @@
+{STYLE:bottom}Welcome to...   the Infix Demo!{PAUSE:2}
+{SPEED:400}
+
+
+
+Now scrolling... FAST!{SPEED:800}
+{SKIP:1}
+{SPEED:400}
+{STYLE:roller}Now with 3D roller!{PAUSE:1.5}
+{SKIP:1}
+{COLOR:255,0,0}
+RED
+{SKIP:1}
+{COLOR:0,255,0}
+GREEN
+{SKIP:1}
+{COLOR:0,0,255}
+BLUE
+{SKIP:1}
+{COLOR:0,0,0}{STYLE:wave}Back to waves...    Greetings to the demoscene! <3    
