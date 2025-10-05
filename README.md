@@ -106,3 +106,34 @@ useful when running in containers where you can mount your scroll text file:
 ```bash
 ./demo -t /path/to/scroll.txt
 ```
+
+### Control Codes
+
+The scroll text supports embedded control codes for dynamic effects, inspired
+by classic demoscene scrollers. Control codes use the format `{CODE:PARAMETER}`.
+
+#### Available Control Codes
+
+| Code | Description | Example |
+|------|-------------|---------|
+| `{PAUSE:seconds}` | Pause scrolling for N seconds | `{PAUSE:3}` |
+| `{SPEED:pixels}` | Change scroll speed (pixels/sec) | `{SPEED:100}` |
+| `{STYLE:name}` | Switch scroll effect style | `{STYLE:roller}` |
+| `{COLOR:r,g,b}` | Set text color (RGB 0-255) | `{COLOR:255,0,0}` |
+
+#### Style Names
+
+- `wave` - Sine wave scroller
+- `roller` - 3D roller scroller with outline and glow
+- `bottom` - Traditional bottom scroller
+
+#### Example Scroll Text
+
+```
+Welcome to the Infix Demo!{PAUSE:2}    {SPEED:250}Fast text!{SPEED:180}
+{STYLE:roller}    Now with 3D roller effect!{PAUSE:1.5}
+{COLOR:255,0,0}Red text!{COLOR:0,255,0}    Green text!{COLOR:0,0,0}
+{STYLE:wave}    Back to sine wave...    Greetings to the demoscene!
+```
+
+**Note:** Use `{COLOR:0,0,0}` to return to the default rainbow gradient effect.

@@ -77,6 +77,12 @@ typedef struct {
     int scene_list[6];      /* Custom scene order */
     int num_scenes;         /* Number of scenes in list */
     char *scroll_text;      /* Dynamically loaded scroll text */
+    /* Scroll control state */
+    float scroll_speed;     /* Current scroll speed */
+    float scroll_pause_until; /* Global time to pause until */
+    Uint8 scroll_color[3];  /* Current scroll color (RGB) */
+    float scroll_offset;    /* Accumulated scroll offset */
+    float last_frame_time;  /* Time of last frame for delta calculation */
 } DemoContext;
 
 /* Plasma effect - optimized with lower resolution and LUT */
@@ -906,6 +912,219 @@ void render_raining_logo(DemoContext *ctx)
 	}
 }
 
+/* Build a map of control code positions in the stripped text */
+typedef struct {
+	int position;  /* Character position in stripped text */
+	float pixel_position;  /* Pixel position based on actual glyph widths */
+	char type;     /* P=pause, S=speed, T=style, C=color */
+	char data[64]; /* Parameter data */
+} ControlCode;
+
+static ControlCode control_codes[256];
+static int num_control_codes = 0;
+
+static void build_control_map(const char *text)
+{
+	if (!text)
+		return;
+
+	num_control_codes = 0;
+	const char *p = text;
+	int char_pos = 0;  /* Position in stripped text */
+
+	while (*p && num_control_codes < 256) {
+		if (*p == '{') {
+			const char *start = p + 1;
+			const char *end = strchr(start, '}');
+
+			if (end) {
+				int len = end - start;
+				if (len > 0 && len < 64) {
+					char cmd[64] = {0};
+					strncpy(cmd, start, len);
+
+					ControlCode *cc = &control_codes[num_control_codes];
+					cc->position = char_pos;
+					cc->pixel_position = -1.0f;  /* Will be calculated later with actual font metrics */
+
+					if (strncmp(cmd, "PAUSE:", 6) == 0) {
+						cc->type = 'P';
+						strncpy(cc->data, cmd + 6, 63);
+						num_control_codes++;
+					} else if (strncmp(cmd, "SPEED:", 6) == 0) {
+						cc->type = 'S';
+						strncpy(cc->data, cmd + 6, 63);
+						num_control_codes++;
+					} else if (strncmp(cmd, "STYLE:", 6) == 0) {
+						cc->type = 'T';
+						strncpy(cc->data, cmd + 6, 63);
+						num_control_codes++;
+					} else if (strncmp(cmd, "COLOR:", 6) == 0) {
+						cc->type = 'C';
+						strncpy(cc->data, cmd + 6, 63);
+						num_control_codes++;
+					}
+				}
+				p = end + 1;
+				continue;
+			}
+		}
+		if (*p != '{' && *p != '}')
+			char_pos++;
+		p++;
+	}
+}
+
+
+/* Apply control codes based on current scroll position */
+static void apply_scroll_controls(DemoContext *ctx, float scroll_offset)
+{
+	/* Track which control codes have been triggered */
+	static int triggered[256] = {0};
+	static int last_num_codes = 0;
+	static float last_offset = 0.0f;
+
+	/* Reset triggered flags if control codes changed */
+	if (num_control_codes != last_num_codes) {
+		for (int i = 0; i < 256; i++)
+			triggered[i] = 0;
+		last_num_codes = num_control_codes;
+	}
+
+	/* Reset triggered flags when scroll wraps around (detect by large negative jump) */
+	if (scroll_offset < last_offset - 1000.0f) {  /* Wrapped around */
+		for (int i = 0; i < 256; i++)
+			triggered[i] = 0;
+		/* Reset scroll state to defaults on wrap */
+		ctx->scroll_speed = 180.0f;
+		ctx->scroll_style = SCROLL_ROLLER_3D;
+		ctx->scroll_color[0] = 0;
+		ctx->scroll_color[1] = 0;
+		ctx->scroll_color[2] = 0;
+
+		/* Immediately apply control codes at position 0 after wrap */
+		for (int i = 0; i < num_control_codes; i++) {
+			ControlCode *cc = &control_codes[i];
+			if (cc->position == 0) {
+				switch (cc->type) {
+				case 'S':
+					{
+						char *endptr;
+						float new_speed = strtof(cc->data, &endptr);
+						if (endptr != cc->data && new_speed >= 0)
+							ctx->scroll_speed = new_speed;
+					}
+					break;
+				case 'T':
+					if (strcmp(cc->data, "wave") == 0)
+						ctx->scroll_style = SCROLL_SINE_WAVE;
+					else if (strcmp(cc->data, "roller") == 0)
+						ctx->scroll_style = SCROLL_ROLLER_3D;
+					else if (strcmp(cc->data, "bottom") == 0)
+						ctx->scroll_style = SCROLL_BOTTOM_TRADITIONAL;
+					break;
+				case 'C':
+					{
+						int r, g, b;
+						if (sscanf(cc->data, "%d,%d,%d", &r, &g, &b) == 3) {
+							ctx->scroll_color[0] = r;
+							ctx->scroll_color[1] = g;
+							ctx->scroll_color[2] = b;
+						}
+					}
+					break;
+				}
+				triggered[i] = 1;
+			}
+		}
+	}
+	last_offset = scroll_offset;
+
+	/* Apply control codes that we've just reached (not yet triggered) */
+	/* Offset to delay trigger - adjust this value to find the right timing */
+	const float trigger_offset = 500.0f;  /* Try WIDTH as starting point */
+
+	for (int i = 0; i < num_control_codes; i++) {
+		ControlCode *cc = &control_codes[i];
+
+		/* Trigger when we pass the pixel position plus offset (only once) */
+		if (!triggered[i] && scroll_offset >= cc->pixel_position + trigger_offset) {
+			triggered[i] = 1;
+
+			switch (cc->type) {
+			case 'P': /* PAUSE */
+				{
+					/* Use strtof for safer parsing with error checking */
+					char *endptr;
+					float pause_sec = strtof(cc->data, &endptr);
+					if (endptr != cc->data && pause_sec > 0) {
+						ctx->scroll_pause_until = ctx->global_time + pause_sec;
+					}
+				}
+				break;
+
+			case 'S': /* SPEED */
+				{
+					char *endptr;
+					float new_speed = strtof(cc->data, &endptr);
+					if (endptr != cc->data && new_speed >= 0)
+						ctx->scroll_speed = new_speed;
+				}
+				break;
+
+			case 'T': /* STYLE */
+				if (strcmp(cc->data, "wave") == 0)
+					ctx->scroll_style = SCROLL_SINE_WAVE;
+				else if (strcmp(cc->data, "roller") == 0)
+					ctx->scroll_style = SCROLL_ROLLER_3D;
+				else if (strcmp(cc->data, "bottom") == 0)
+					ctx->scroll_style = SCROLL_BOTTOM_TRADITIONAL;
+				break;
+
+			case 'C': /* COLOR */
+				{
+					int r, g, b;
+					if (sscanf(cc->data, "%d,%d,%d", &r, &g, &b) == 3) {
+						ctx->scroll_color[0] = r;
+						ctx->scroll_color[1] = g;
+						ctx->scroll_color[2] = b;
+					}
+				}
+				break;
+			}
+		}
+	}
+}
+
+/* Remove control codes from text for display */
+static char *strip_control_codes(const char *text)
+{
+	if (!text)
+		return NULL;
+
+	int len = strlen(text);
+	char *result = malloc(len + 1);
+	if (!result)
+		return NULL;
+
+	const char *src = text;
+	char *dst = result;
+
+	while (*src) {
+		if (*src == '{') {
+			const char *end = strchr(src, '}');
+			if (end) {
+				src = end + 1;
+				continue;
+			}
+		}
+		*dst++ = *src++;
+	}
+	*dst = '\0';
+
+	return result;
+}
+
 /* Scroll text rendering with different styles */
 void render_scroll_text(DemoContext *ctx)
 {
@@ -914,9 +1133,35 @@ void render_scroll_text(DemoContext *ctx)
 	if (ctx->scroll_style == SCROLL_NONE || !text)
 		return;
 
-	int text_len = strlen(text);
-	float scroll_speed = 180.0;
-	float scroll_offset = ctx->global_time * scroll_speed;
+	/* Strip control codes for rendering and build control map */
+	static char *display_text = NULL;
+	static const char *last_text = NULL;
+	static int needs_pixel_calc = 1;
+	if (text != last_text) {
+		free(display_text);
+		display_text = strip_control_codes(text);
+		build_control_map(text);  /* Build map when text changes */
+		/* Pixel positions will be calculated later using the glyph cache */
+		needs_pixel_calc = 1;  /* Flag that we need to recalculate pixel positions */
+		last_text = text;
+	}
+
+	if (!display_text)
+		return;
+
+	int text_len = strlen(display_text);
+
+	/* Update scroll offset - only advance when not paused */
+	if (ctx->last_frame_time == 0.0f) {
+		ctx->last_frame_time = ctx->global_time;
+	}
+
+	float delta_time = ctx->global_time - ctx->last_frame_time;
+	ctx->last_frame_time = ctx->global_time;
+
+	if (ctx->global_time >= ctx->scroll_pause_until) {
+		ctx->scroll_offset += ctx->scroll_speed * delta_time;
+	}
 
 	if (ctx->scroll_style == SCROLL_SINE_WAVE || ctx->scroll_style == SCROLL_ROLLER_3D) {
 		/* Glyph cache with metrics */
@@ -941,8 +1186,8 @@ void render_scroll_text(DemoContext *ctx)
 		float x_pos = WIDTH;
 
 		for (int i = 0; i < text_len; i++) {
-			char buffer[2] = {text[i], '\0'};
-			unsigned char ch = (unsigned char)text[i];
+			char buffer[2] = {display_text[i], '\0'};
+			unsigned char ch = (unsigned char)display_text[i];
 
 			/* Render character if not cached */
 			if (!gcache[ch].valid && ch >= 32 && ch < 127) {
@@ -972,20 +1217,64 @@ void render_scroll_text(DemoContext *ctx)
 				}
 			}
 
-			float char_x = x_pos - scroll_offset;
+			float char_x = x_pos - ctx->scroll_offset;
 
-			/* Calculate total advance once per frame */
+			/* Calculate total advance once per frame, and pixel positions for control codes */
 			if (i == 0) {
+#ifdef DEBUG_CONTROL_CODES
+				if (needs_pixel_calc) {
+					printf("Control code pixel positions calculated:\n");
+				}
+#endif
 				total_adv = 0;
+				float pixel_pos = 0.0f;
+				int cc_idx = 0;
+
 				for (int k = 0; k < text_len; k++) {
-					unsigned char ck = (unsigned char)text[k];
-					total_adv += gcache[ck].valid ? gcache[ck].adv : 35;
+					unsigned char ck = (unsigned char)display_text[k];
+
+					/* Update control code pixel positions at this character position */
+					if (needs_pixel_calc) {
+						while (cc_idx < num_control_codes && control_codes[cc_idx].position == k) {
+							control_codes[cc_idx].pixel_position = pixel_pos;
+#ifdef DEBUG_CONTROL_CODES
+							printf("  Position %d: pixel %.1f, type %c, data '%s'\n",
+							       control_codes[cc_idx].position,
+							       control_codes[cc_idx].pixel_position,
+							       control_codes[cc_idx].type,
+							       control_codes[cc_idx].data);
+#endif
+							cc_idx++;
+						}
+					}
+
+					int adv = gcache[ck].valid ? gcache[ck].adv : 35;
+					total_adv += adv;
+					pixel_pos += adv;
 #if SDL_TTF_VERSION_ATLEAST(2,0,18)
 					if (k > 0) {
-						unsigned char prev = (unsigned char)text[k - 1];
-						total_adv += TTF_GetFontKerningSizeGlyphs(ctx->font, prev, ck);
+						unsigned char prev = (unsigned char)display_text[k - 1];
+						int kern = TTF_GetFontKerningSizeGlyphs(ctx->font, prev, ck);
+						total_adv += kern;
+						pixel_pos += kern;
 					}
 #endif
+				}
+
+				/* Handle control codes at end of text */
+				if (needs_pixel_calc) {
+					while (cc_idx < num_control_codes) {
+						control_codes[cc_idx].pixel_position = pixel_pos;
+#ifdef DEBUG_CONTROL_CODES
+						printf("  Position %d: pixel %.1f, type %c, data '%s'\n",
+						       control_codes[cc_idx].position,
+						       control_codes[cc_idx].pixel_position,
+						       control_codes[cc_idx].type,
+						       control_codes[cc_idx].data);
+#endif
+						cc_idx++;
+					}
+					needs_pixel_calc = 0;
 				}
 			}
 
@@ -997,11 +1286,18 @@ void render_scroll_text(DemoContext *ctx)
 				float wave = sinf(phase) * 80.0f;
 				int y_pos = HEIGHT / 2 + (int)wave;
 
-				/* Update color for gradient effect */
-				int color_shift = (int)(ctx->global_time * 100 + i * 10) % 360;
-				Uint8 r = (Uint8)(128 + 127 * sin(color_shift * PI / 180));
-				Uint8 g = (Uint8)(128 + 127 * sin((color_shift + 120) * PI / 180));
-				Uint8 b = (Uint8)(128 + 127 * sin((color_shift + 240) * PI / 180));
+				/* Update color - use custom color if set, otherwise gradient */
+				Uint8 r, g, b;
+				if (ctx->scroll_color[0] || ctx->scroll_color[1] || ctx->scroll_color[2]) {
+					r = ctx->scroll_color[0];
+					g = ctx->scroll_color[1];
+					b = ctx->scroll_color[2];
+				} else {
+					int color_shift = (int)(ctx->global_time * 100 + i * 10) % 360;
+					r = (Uint8)(128 + 127 * sin(color_shift * PI / 180));
+					g = (Uint8)(128 + 127 * sin((color_shift + 120) * PI / 180));
+					b = (Uint8)(128 + 127 * sin((color_shift + 240) * PI / 180));
+				}
 
 				if (ctx->scroll_style == SCROLL_ROLLER_3D) {
 					/* 3D roller with scale, outline, and glow */
@@ -1053,20 +1349,85 @@ void render_scroll_text(DemoContext *ctx)
 #endif
 			x_pos += adv;
 		}
+
+		/* Apply control codes based on scroll position */
+		apply_scroll_controls(ctx, ctx->scroll_offset);
 	} else if (ctx->scroll_style == SCROLL_BOTTOM_TRADITIONAL) {
 		/* Traditional bottom scroller - render entire line once */
 		static SDL_Texture *line_tex = NULL;
 		static int line_w = 0;
+		static const char *last_display_text = NULL;
 
-		if (!line_tex) {
+		/* Rebuild texture if text changed */
+		if (!line_tex || display_text != last_display_text) {
+			if (line_tex) {
+				SDL_DestroyTexture(line_tex);
+				line_tex = NULL;
+			}
 			SDL_Color color = {255, 255, 100, 255};
-			SDL_Surface *surface = TTF_RenderText_Blended(ctx->font, text, color);
+			SDL_Surface *surface = TTF_RenderText_Blended(ctx->font, display_text, color);
 			if (surface) {
 				line_tex = SDL_CreateTextureFromSurface(ctx->renderer, surface);
 				line_w = surface->w;
 				SDL_FreeSurface(surface);
+				last_display_text = display_text;
+
+				/* Calculate pixel positions for control codes using glyph metrics */
+				if (needs_pixel_calc) {
+#ifdef DEBUG_CONTROL_CODES
+					printf("Control code pixel positions calculated:\n");
+#endif
+					float pixel_pos = 0.0f;
+					int cc_idx = 0;
+
+					for (int k = 0; k < text_len; k++) {
+						unsigned char ch = (unsigned char)display_text[k];
+
+						/* Update control code pixel positions at this character position */
+						while (cc_idx < num_control_codes && control_codes[cc_idx].position == k) {
+							control_codes[cc_idx].pixel_position = pixel_pos;
+#ifdef DEBUG_CONTROL_CODES
+							printf("  Position %d: pixel %.1f, type %c, data '%s'\n",
+							       control_codes[cc_idx].position,
+							       control_codes[cc_idx].pixel_position,
+							       control_codes[cc_idx].type,
+							       control_codes[cc_idx].data);
+#endif
+							cc_idx++;
+						}
+
+						/* Get advance width for this character */
+						if (ch >= 32 && ch < 127) {
+							int minx, maxx, miny, maxy, advance;
+							if (TTF_GlyphMetrics(ctx->font, ch, &minx, &maxx, &miny, &maxy, &advance) == 0) {
+								pixel_pos += advance;
+							} else {
+								pixel_pos += 20;  /* Fallback */
+							}
+						} else {
+							pixel_pos += 20;  /* Fallback for non-printable */
+						}
+					}
+
+					/* Handle control codes at end of text */
+					while (cc_idx < num_control_codes) {
+						control_codes[cc_idx].pixel_position = pixel_pos;
+#ifdef DEBUG_CONTROL_CODES
+						printf("  Position %d: pixel %.1f, type %c, data '%s'\n",
+						       control_codes[cc_idx].position,
+						       control_codes[cc_idx].pixel_position,
+						       control_codes[cc_idx].type,
+						       control_codes[cc_idx].data);
+#endif
+						cc_idx++;
+					}
+					needs_pixel_calc = 0;
+				}
 			}
 		}
+
+		/* Apply control codes based on scroll position */
+		apply_scroll_controls(ctx, ctx->scroll_offset);
 
 		if (line_tex) {
 			int y_pos = HEIGHT - 60;
@@ -1074,7 +1435,7 @@ void render_scroll_text(DemoContext *ctx)
 			SDL_QueryTexture(line_tex, NULL, NULL, NULL, &h);
 
 			/* Scroll position */
-			int scroll_x = (int)(WIDTH - scroll_offset);
+			int scroll_x = (int)(WIDTH - ctx->scroll_offset);
 			while (scroll_x < -line_w) scroll_x += line_w;
 
 			/* Draw the line, wrapping around */
@@ -1252,21 +1613,39 @@ int main(int argc, char *argv[])
 	ctx.fixed_scene = -1;  /* -1 means auto-switch scenes */
 	ctx.current_scene_index = 0;
 	ctx.scene_duration = scene_duration;
+	ctx.scroll_speed = 180.0f;  /* Default scroll speed */
+	ctx.scroll_pause_until = 0.0f;
+	ctx.scroll_color[0] = 0;  /* 0,0,0 means use gradient */
+	ctx.scroll_color[1] = 0;
+	ctx.scroll_color[2] = 0;
+	ctx.scroll_style = SCROLL_ROLLER_3D;  /* Default scroll style */
+	ctx.scroll_offset = 0.0f;
+	ctx.last_frame_time = 0.0f;
 
 	/* Load scroll text from file or use default */
 	if (scroll_file_path) {
-		FILE *scroll_file = fopen(scroll_file_path, "r");
-		if (scroll_file) {
-			fseek(scroll_file, 0, SEEK_END);
-			long file_size = ftell(scroll_file);
-			fseek(scroll_file, 0, SEEK_SET);
+		FILE *fp;
+
+		fp = fopen(scroll_file_path, "r");
+		if (fp) {
+			size_t i, read_bytes = 0;
+			long file_size;
+
+			fseek(fp, 0, SEEK_END);
+			file_size = ftell(fp);
+			fseek(fp, 0, SEEK_SET);
 
 			ctx.scroll_text = malloc(file_size + 1);
 			if (ctx.scroll_text) {
-				size_t read_bytes = fread(ctx.scroll_text, 1, file_size, scroll_file);
+				read_bytes = fread(ctx.scroll_text, 1, file_size, fp);
 				ctx.scroll_text[read_bytes] = '\0';
 			}
-			fclose(scroll_file);
+			fclose(fp);
+
+			for (i = 0; i < read_bytes; i++) {
+				if (ctx.scroll_text[i] == '\n' || ctx.scroll_text[i] == '\r')
+					ctx.scroll_text[i] = ' ';
+			}
 		} else {
 			fprintf(stderr, "Warning: Could not open '%s', using default text\n", scroll_file_path);
 			ctx.scroll_text = strdup(default_text);
@@ -1542,24 +1921,20 @@ int main(int argc, char *argv[])
 		/* Render current scene */
 		switch (ctx.current_scene) {
 		case 0:
-			ctx.scroll_style = SCROLL_ROLLER_3D;
 			render_starfield(&ctx);
 			render_scroll_text(&ctx);
 			break;
 		case 1:
-			ctx.scroll_style = SCROLL_SINE_WAVE;
 			render_plasma(&ctx);
 			SDL_RenderClear(ctx.renderer);
 			SDL_RenderCopy(ctx.renderer, ctx.plasma_texture, NULL, NULL);
 			render_scroll_text(&ctx);
 			break;
 		case 2:
-			ctx.scroll_style = SCROLL_BOTTOM_TRADITIONAL;
 			render_cube(&ctx);
 			render_scroll_text(&ctx);
 			break;
 		case 3:
-			ctx.scroll_style = SCROLL_BOTTOM_TRADITIONAL;
 			render_tunnel(&ctx);
 			SDL_UpdateTexture(ctx.texture, NULL, ctx.pixels, WIDTH * sizeof(Uint32));
 			SDL_RenderClear(ctx.renderer);
@@ -1567,17 +1942,14 @@ int main(int argc, char *argv[])
 			render_scroll_text(&ctx);
 			break;
 		case 4:
-			ctx.scroll_style = SCROLL_BOTTOM_TRADITIONAL;
 			render_bouncing_logo(&ctx);
 			render_scroll_text(&ctx);
 			break;
 		case 5:
-			ctx.scroll_style = SCROLL_BOTTOM_TRADITIONAL;
 			render_raining_logo(&ctx);
 			render_scroll_text(&ctx);
 			break;
 		case 6:
-			ctx.scroll_style = SCROLL_BOTTOM_TRADITIONAL;
 			render_star_ball(&ctx);
 			render_scroll_text(&ctx);
 			break;
