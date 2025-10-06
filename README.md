@@ -5,7 +5,9 @@
 [![Docker Image](https://img.shields.io/badge/docker-ghcr.io-blue.svg)](https://ghcr.io/kernelkit/demo)
 [![Latest Release](https://img.shields.io/github/v/release/kernelkit/demo?include_prereleases&label=latest)](https://github.com/kernelkit/demo/releases/latest)
 
-A classic demoscene-style demo featuring multiple visual effects with oldschool aesthetics. Built with SDL2 and inspired by 1990s Amiga/PC demos.
+A classic demoscene-style demo featuring multiple visual effects with
+oldschool aesthetics. Built with SDL2 and inspired by 1990s Amiga/PC
+demos.
 
 ![Demo Screenshot](demo-screenshot.png)
 
@@ -28,6 +30,7 @@ The demo includes 9 different scenes that cycle automatically:
 ### Text Scrollers
 
 Multiple scroller styles with smooth effects:
+
 - **Classic** — Traditional bottom scroller
 - **Sine Wave** — Undulating wave motion
 - **3D Roller** — Perspective roller with configurable outline/glow effects
@@ -48,6 +51,7 @@ Multiple scroller styles with smooth effects:
 Download the latest AppImage for your architecture:
 
 **x86_64 (Intel/AMD):**
+
 ```bash
 wget https://github.com/kernelkit/demo/releases/latest/download/InfixDemo-x86_64.AppImage
 chmod +x InfixDemo-x86_64.AppImage
@@ -55,6 +59,7 @@ chmod +x InfixDemo-x86_64.AppImage
 ```
 
 **aarch64 (ARM64):**
+
 ```bash
 wget https://github.com/kernelkit/demo/releases/latest/download/InfixDemo-aarch64.AppImage
 chmod +x InfixDemo-aarch64.AppImage
@@ -66,18 +71,33 @@ No installation required! The AppImage bundles all dependencies.
 ### Run with Docker
 
 **Pull and run the latest image:**
+
 ```bash
 # Allow X11 connections (run once per session)
 xhost +local:docker
 
-# Run the demo
+# Run the demo (video only)
 docker run --rm -it \
   -e DISPLAY=$DISPLAY \
   -v /tmp/.X11-unix:/tmp/.X11-unix \
   ghcr.io/kernelkit/demo:latest
 ```
 
+**With audio support (PulseAudio/PipeWire):**
+
+```bash
+xhost +local:docker
+docker run --rm -it \
+  -e DISPLAY=$DISPLAY \
+  -v /tmp/.X11-unix:/tmp/.X11-unix \
+  -e SDL_AUDIODRIVER=pulseaudio \
+  -e PULSE_SERVER=unix:${XDG_RUNTIME_DIR}/pulse/native \
+  -v ${XDG_RUNTIME_DIR}/pulse/native:${XDG_RUNTIME_DIR}/pulse/native \
+  ghcr.io/kernelkit/demo:latest
+```
+
 **Or use docker-compose:**
+
 ```bash
 docker compose up
 ```
