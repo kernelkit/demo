@@ -96,6 +96,19 @@ docker run --rm -it \
   ghcr.io/kernelkit/demo:latest
 ```
 
+**With specific window size:**
+
+```bash
+# Useful if container detects wrong screen dimensions
+docker run --rm -it \
+  -e DISPLAY=$DISPLAY \
+  -v /tmp/.X11-unix:/tmp/.X11-unix \
+  -e SDL_AUDIODRIVER=pulseaudio \
+  -e PULSE_SERVER=unix:${XDG_RUNTIME_DIR}/pulse/native \
+  -v ${XDG_RUNTIME_DIR}/pulse/native:${XDG_RUNTIME_DIR}/pulse/native \
+  ghcr.io/kernelkit/demo:latest -w 1920x1080
+```
+
 **Or use docker-compose:**
 
 ```bash
