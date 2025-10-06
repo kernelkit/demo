@@ -65,21 +65,7 @@ docker-run: docker-build
 		demo
 
 appimage: $(TARGET)
-	@echo "Creating AppImage..."
-	@mkdir -p AppDir/usr/bin
-	@mkdir -p AppDir/usr/share/applications
-	@mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
-	@cp $(TARGET) AppDir/usr/bin/
-	@printf '[Desktop Entry]\nType=Application\nName=Infix Demo\nExec=usr/bin/demo\nIcon=demo\nCategories=Game;\n' > AppDir/usr/share/applications/demo.desktop
-	@cp jack.png AppDir/usr/share/icons/hicolor/256x256/apps/demo.png
-	@ln -sf usr/share/applications/demo.desktop AppDir/demo.desktop
-	@ln -sf usr/share/icons/hicolor/256x256/apps/demo.png AppDir/demo.png
-	@ln -sf usr/bin/demo AppDir/AppRun
 	@ARCH=$${ARCH:-x86_64}; \
-	wget -q -c https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-$${ARCH}.AppImage -O appimagetool && \
-	chmod +x appimagetool && \
-	./appimagetool AppDir InfixDemo-$${ARCH}.AppImage && \
-	rm -rf AppDir appimagetool && \
-	echo "AppImage created: InfixDemo-$${ARCH}.AppImage"
+	./utils/build-appimage.sh $${ARCH}
 
 .PHONY: all clean run debug appimage docker-build docker-run
