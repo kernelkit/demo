@@ -10,6 +10,7 @@ RUN apk add --no-cache \
     sdl2_mixer \
     sdl2_mixer-dev \
     libpulse \
+    libxmp \
     gcc \
     musl-dev \
     make \
