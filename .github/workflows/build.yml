@@ -32,14 +32,14 @@ jobs:
               -v $PWD:/workspace -w /workspace \
               ubuntu:22.04 /bin/bash -c '
                 apt-get update && \
-                apt-get install -y xxd libsdl2-dev libsdl2-ttf-dev \
+                apt-get install -y xxd wget libsdl2-dev libsdl2-ttf-dev \
                   libsdl2-image-dev libsdl2-mixer-dev build-essential squashfs-tools && \
                 make clean && make && \
                 ./utils/build-appimage.sh aarch64
               '
           else
             sudo apt-get update
-            sudo apt-get install -y libsdl2-dev libsdl2-ttf-dev \
+            sudo apt-get install -y wget libsdl2-dev libsdl2-ttf-dev \
               libsdl2-image-dev libsdl2-mixer-dev squashfs-tools
             make clean && make
             ./utils/build-appimage.sh x86_64
@@ -56,9 +56,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-    strategy:
-      matrix:
-        platform: [linux/amd64, linux/arm64]
 
     steps:
       - uses: actions/checkout@v4
@@ -89,7 +86,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          platforms: ${{ matrix.platform }}
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

@@ -42,12 +42,21 @@ EOF
 
 chmod +x AppDir/AppRun
 
-# Create AppImage using mksquashfs
+# Download AppImage runtime for the target architecture
+RUNTIME_URL="https://github.com/AppImage/AppImageKit/releases/download/continuous/runtime-${ARCH}"
+echo "Downloading AppImage runtime for ${ARCH}..."
+wget -q -O runtime "${RUNTIME_URL}"
+
+# Create squashfs filesystem
+echo "Creating squashfs filesystem..."
+mksquashfs AppDir filesystem.squashfs -root-owned -noappend
+
+# Combine runtime + squashfs to create proper AppImage
 echo "Creating ${APPIMAGE_NAME}..."
-mksquashfs AppDir "${APPIMAGE_NAME}" -root-owned -noappend
+cat runtime filesystem.squashfs > "${APPIMAGE_NAME}"
 chmod +x "${APPIMAGE_NAME}"
 
 # Cleanup
-rm -rf AppDir
+rm -rf AppDir runtime filesystem.squashfs
 
 echo "AppImage created: ${APPIMAGE_NAME}"
