@@ -9,6 +9,7 @@ RUN apk add --no-cache \
     sdl2_image-dev \
     sdl2_mixer \
     sdl2_mixer-dev \
+    pulseaudio-clients \
     gcc \
     musl-dev \
     make \
