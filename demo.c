@@ -2417,13 +2417,12 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	/* Initialize SDL_mixer for music */
+	/* Initialize SDL_mixer for music (non-fatal if it fails) */
+	int audio_available = 1;
 	if (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 2048) < 0) {
-		fprintf(stderr, "Mix_OpenAudio failed: %s\n", Mix_GetError());
-		IMG_Quit();
-		TTF_Quit();
-		SDL_Quit();
-		return 1;
+		fprintf(stderr, "Warning: Mix_OpenAudio failed: %s\n", Mix_GetError());
+		fprintf(stderr, "Continuing without audio...\n");
+		audio_available = 0;
 	}
 
 	/* Initialize demo context */
@@ -2699,14 +2698,16 @@ int main(int argc, char *argv[])
 
 	/* Load and play music from embedded data */
 #ifdef HAVE_MUSIC
-	SDL_RWops *music_rw = SDL_RWFromConstMem(music_mod, music_mod_len);
-	if (music_rw) {
-		Mix_Music *music = Mix_LoadMUS_RW(music_rw, 1);  /* 1 = auto-free RW */
-		if (music) {
-			Mix_PlayMusic(music, -1);  /* -1 = loop forever */
-			Mix_VolumeMusic(MIX_MAX_VOLUME / 2);  /* 50% volume */
-		} else {
-			fprintf(stderr, "Warning: Failed to load music: %s\n", Mix_GetError());
+	if (audio_available) {
+		SDL_RWops *music_rw = SDL_RWFromConstMem(music_mod, music_mod_len);
+		if (music_rw) {
+			Mix_Music *music = Mix_LoadMUS_RW(music_rw, 1);  /* 1 = auto-free RW */
+			if (music) {
+				Mix_PlayMusic(music, -1);  /* -1 = loop forever */
+				Mix_VolumeMusic(MIX_MAX_VOLUME / 2);  /* 50% volume */
+			} else {
+				fprintf(stderr, "Warning: Failed to load music: %s\n", Mix_GetError());
+			}
 		}
 	}
 #endif
@@ -2855,7 +2856,8 @@ int main(int argc, char *argv[])
 	SDL_DestroyTexture(ctx.texture);
 	SDL_DestroyRenderer(ctx.renderer);
 	SDL_DestroyWindow(ctx.window);
-	Mix_CloseAudio();
+	if (audio_available)
+		Mix_CloseAudio();
 	IMG_Quit();
 	TTF_Quit();
 	SDL_Quit();
