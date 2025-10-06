@@ -106,7 +106,8 @@ docker run --rm -it \
   -e SDL_AUDIODRIVER=pulseaudio \
   -e PULSE_SERVER=unix:${XDG_RUNTIME_DIR}/pulse/native \
   -v ${XDG_RUNTIME_DIR}/pulse/native:${XDG_RUNTIME_DIR}/pulse/native \
-  ghcr.io/kernelkit/demo:latest -w 1920x1080
+  ghcr.io/kernelkit/demo:latest \
+  ./demo -w 1920x1080
 ```
 
 **Or use docker-compose:**
