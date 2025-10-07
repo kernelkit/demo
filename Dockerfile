@@ -11,6 +11,8 @@ RUN apk add --no-cache \
     sdl2_mixer-dev \
     libpulse \
     libxmp \
+    mesa-dri-gallium \
+    mesa-gbm \
     gcc \
     musl-dev \
     make \
@@ -22,6 +24,8 @@ COPY demo.c Makefile topaz-8.otf *.png music.mod* ./
 
 RUN make
 
+# Default to X11, but can be overridden for framebuffer
 ENV DISPLAY=:0
+ENV SDL_VIDEODRIVER=x11
 
 CMD ["./demo"]

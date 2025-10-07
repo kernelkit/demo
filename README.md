@@ -116,6 +116,57 @@ docker run --rm -it \
 docker compose up
 ```
 
+### Run without X11 (Direct Framebuffer)
+
+For embedded systems or headless setups without X11 (e.g., Raspberry Pi, embedded Linux):
+
+**Using KMS/DRM (recommended for modern systems):**
+
+```bash
+# Requires access to DRI and input devices
+docker run --rm -it \
+  --privileged \
+  -v /dev/dri:/dev/dri \
+  -v /dev/input:/dev/input \
+  -e SDL_VIDEODRIVER=kmsdrm \
+  -e SDL_AUDIODRIVER=alsa \
+  ghcr.io/kernelkit/demo:latest
+```
+
+**Using legacy framebuffer:**
+
+```bash
+docker run --rm -it \
+  --privileged \
+  -v /dev/fb0:/dev/fb0 \
+  -v /dev/input:/dev/input \
+  -e SDL_VIDEODRIVER=fbcon \
+  -e SDL_FBDEV=/dev/fb0 \
+  -e SDL_AUDIODRIVER=alsa \
+  ghcr.io/kernelkit/demo:latest
+```
+
+**On Raspberry Pi 4:**
+
+```bash
+# KMS/DRM mode (best performance)
+docker run --rm -it \
+  --privileged \
+  -v /dev/dri:/dev/dri \
+  -v /dev/input:/dev/input \
+  -e SDL_VIDEODRIVER=kmsdrm \
+  -e SDL_AUDIODRIVER=alsa \
+  ghcr.io/kernelkit/demo:latest \
+  ./demo -f
+```
+
+**Notes:**
+- `SDL_VIDEODRIVER=kmsdrm` uses kernel mode setting (modern, hardware accelerated)
+- `SDL_VIDEODRIVER=fbcon` uses legacy framebuffer (fallback)
+- `--privileged` gives access to GPU and input devices
+- `-f` flag runs in fullscreen mode (recommended for framebuffer)
+- For audio without PulseAudio, use `SDL_AUDIODRIVER=alsa` or omit for no audio
+
 ## Building from Source
 
 ### Dependencies
