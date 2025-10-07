@@ -13,6 +13,11 @@ RUN apk add --no-cache \
     libxmp \
     mesa-dri-gallium \
     mesa-gbm \
+    xorg-server \
+    xf86-video-fbdev \
+    xf86-input-evdev \
+    xdpyinfo \
+    xinit \
     gcc \
     musl-dev \
     make \
@@ -24,8 +29,53 @@ COPY demo.c Makefile topaz-8.otf *.png music.mod* ./
 
 RUN make
 
-# Default to X11, but can be overridden for framebuffer
-ENV DISPLAY=:0
-ENV SDL_VIDEODRIVER=x11
+# Create minimal X config for framebuffer
+RUN mkdir -p /etc/X11 && cat > /etc/X11/xorg.conf << 'EOF'
+Section "ServerFlags"
+    Option "DontVTSwitch" "true"
+    Option "BlankTime" "0"
+    Option "StandbyTime" "0"
+    Option "SuspendTime" "0"
+    Option "OffTime" "0"
+EndSection
 
-CMD ["./demo"]
+Section "Device"
+    Identifier "Card0"
+    Driver "fbdev"
+    Option "fbdev" "/dev/fb0"
+EndSection
+
+Section "Screen"
+    Identifier "Screen0"
+    Device "Card0"
+EndSection
+EOF
+
+# Create startup script
+RUN cat > /app/start.sh << 'EOF'
+#!/bin/sh
+# Smart startup: use existing X or start our own
+
+# Check if X server is already available
+if xdpyinfo -display "${DISPLAY:-:0}" >/dev/null 2>&1; then
+    echo "Using existing X server on $DISPLAY"
+    exec ./demo "$@"
+else
+    echo "No X server found, starting embedded X server..."
+    # Start X server in background and run demo
+    Xorg -noreset +extension GLX +extension RANDR +extension RENDER -logfile /tmp/xorg.log -config /etc/X11/xorg.conf :0 &
+    XPID=$!
+    sleep 2
+    DISPLAY=:0 ./demo "$@"
+    EXITCODE=$?
+    kill $XPID 2>/dev/null
+    wait $XPID 2>/dev/null
+    exit $EXITCODE
+fi
+EOF
+
+RUN chmod +x /app/start.sh
+
+ENV DISPLAY=:0
+
+CMD ["/app/start.sh", "-f"]

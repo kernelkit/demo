@@ -70,13 +70,17 @@ No installation required! The AppImage bundles all dependencies.
 
 ### Run with Docker
 
-**Pull and run the latest image:**
+The container image automatically detects whether X11 is available and adapts accordingly.
+
+#### On Desktop Systems (with X11)
+
+**Basic run:**
 
 ```bash
 # Allow X11 connections (run once per session)
 xhost +local:docker
 
-# Run the demo (video only)
+# Run the demo
 docker run --rm -it \
   -e DISPLAY=$DISPLAY \
   -v /tmp/.X11-unix:/tmp/.X11-unix \
@@ -107,65 +111,47 @@ docker run --rm -it \
   -e PULSE_SERVER=unix:${XDG_RUNTIME_DIR}/pulse/native \
   -v ${XDG_RUNTIME_DIR}/pulse/native:${XDG_RUNTIME_DIR}/pulse/native \
   ghcr.io/kernelkit/demo:latest \
-  ./demo -w 1920x1080
+  /app/start.sh -w 1920x1080
 ```
 
-**Or use docker-compose:**
+#### On Embedded Systems (without X11)
 
-```bash
-docker compose up
-```
+For embedded systems like Raspberry Pi or Infix OS, the container starts its own X server:
 
-### Run without X11 (Direct Framebuffer)
-
-For embedded systems or headless setups without X11 (e.g., Raspberry Pi, embedded Linux):
-
-**Using KMS/DRM (recommended for modern systems):**
-
-```bash
-# Requires access to DRI and input devices
-docker run --rm -it \
-  --privileged \
-  -v /dev/dri:/dev/dri \
-  -v /dev/input:/dev/input \
-  -e SDL_VIDEODRIVER=kmsdrm \
-  -e SDL_AUDIODRIVER=alsa \
-  ghcr.io/kernelkit/demo:latest
-```
-
-**Using legacy framebuffer:**
+**Raspberry Pi 4 / Embedded Linux (fullscreen):**
 
 ```bash
 docker run --rm -it \
   --privileged \
   -v /dev/fb0:/dev/fb0 \
-  -v /dev/input:/dev/input \
-  -e SDL_VIDEODRIVER=fbcon \
-  -e SDL_FBDEV=/dev/fb0 \
-  -e SDL_AUDIODRIVER=alsa \
+  -v /dev/tty1:/dev/tty1 \
   ghcr.io/kernelkit/demo:latest
 ```
 
-**On Raspberry Pi 4:**
+**With custom demo options:**
 
 ```bash
-# KMS/DRM mode (best performance)
+# Example: 30 seconds per scene, show scenes 0, 2, and 6
 docker run --rm -it \
   --privileged \
-  -v /dev/dri:/dev/dri \
-  -v /dev/input:/dev/input \
-  -e SDL_VIDEODRIVER=kmsdrm \
-  -e SDL_AUDIODRIVER=alsa \
+  -v /dev/fb0:/dev/fb0 \
+  -v /dev/tty1:/dev/tty1 \
   ghcr.io/kernelkit/demo:latest \
-  ./demo -f
+  /app/start.sh -d 30 0 2 6
+```
+
+#### Using docker-compose
+
+```bash
+docker compose up
 ```
 
 **Notes:**
-- `SDL_VIDEODRIVER=kmsdrm` uses kernel mode setting (modern, hardware accelerated)
-- `SDL_VIDEODRIVER=fbcon` uses legacy framebuffer (fallback)
-- `--privileged` gives access to GPU and input devices
-- `-f` flag runs in fullscreen mode (recommended for framebuffer)
-- For audio without PulseAudio, use `SDL_AUDIODRIVER=alsa` or omit for no audio
+- The container automatically detects if X11 is available via `xdpyinfo`
+- With X11: Uses the host's X server
+- Without X11: Starts embedded X server using framebuffer
+- `--privileged` needed for framebuffer/TTY access on embedded systems
+- Default runs fullscreen (`-f` flag) when using embedded X server
 
 ## Building from Source
 
