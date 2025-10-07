@@ -11,11 +11,15 @@ RUN apk add --no-cache \
     sdl2_mixer-dev \
     libpulse \
     libxmp \
+    libdrm \
     mesa-dri-gallium \
     mesa-gbm \
+    mesa-egl \
+    mesa-gl \
+    mesa-gles \
     xorg-server \
-    xf86-video-fbdev \
-    xf86-input-evdev \
+    xf86-video-modesetting \
+    xf86-input-libinput \
     xdpyinfo \
     xinit \
     gcc \
@@ -29,7 +33,7 @@ COPY demo.c Makefile topaz-8.otf *.png music.mod* ./
 
 RUN make
 
-# Create minimal X config for framebuffer
+# Create minimal X config for GPU acceleration
 RUN mkdir -p /etc/X11 && cat > /etc/X11/xorg.conf << 'EOF'
 Section "ServerFlags"
     Option "DontVTSwitch" "true"
@@ -41,8 +45,7 @@ EndSection
 
 Section "Device"
     Identifier "Card0"
-    Driver "fbdev"
-    Option "fbdev" "/dev/fb0"
+    Driver "modesetting"
 EndSection
 
 Section "Screen"
