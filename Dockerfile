@@ -37,6 +37,7 @@ RUN apk add --no-cache \
     xf86-video-modesetting \
     xf86-input-libinput \
     xdpyinfo \
+    xrandr \
     xinit
 
 WORKDIR /app

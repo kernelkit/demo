@@ -30,6 +30,13 @@ else
     XPID=$!
     sleep 2
 
+    # Apply display rotation if requested
+    if [ -n "$DISPLAY_ROTATE" ]; then
+        echo "Applying display rotation: $DISPLAY_ROTATE"
+        OUTPUT=$(DISPLAY=:0 xrandr | grep " connected" | head -1 | cut -d' ' -f1)
+        DISPLAY=:0 xrandr --output "$OUTPUT" --rotate "$DISPLAY_ROTATE"
+    fi
+
     # Run demo in background so we can handle signals
     DISPLAY=:0 ./demo "$@" &
     DEMOPID=$!

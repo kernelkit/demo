@@ -140,11 +140,31 @@ docker run --rm -it \
   /app/start.sh -d 30 0 2 6
 ```
 
+**With display rotation (e.g., RPi 7" touchscreen):**
+
+```bash
+# Rotate display 180 degrees
+docker run --rm -it \
+  --privileged \
+  -v /dev/fb0:/dev/fb0 \
+  -v /dev/tty1:/dev/tty1 \
+  -e DISPLAY_ROTATE=inverted \
+  ghcr.io/kernelkit/demo:latest
+```
+
 #### Using docker-compose
 
 ```bash
 docker compose up
 ```
+
+#### Environment Variables
+
+- **`DISPLAY_ROTATE`** - Rotate the display (values: `normal`, `left`, `right`, `inverted`)
+  - `normal` - 0° (default)
+  - `left` - 90° counter-clockwise
+  - `right` - 90° clockwise
+  - `inverted` - 180° upside down
 
 **Notes:**
 - The container automatically detects if X11 is available via `xdpyinfo`
