@@ -1,6 +1,10 @@
 #!/bin/sh
 # Smart startup: use existing X or start our own
 
+# Use /tmp for caches - no need for persistent cache in a demo
+export XDG_CACHE_HOME=/tmp/.cache
+export PULSE_CLIENTCONFIG=/tmp/pulse/client.conf
+
 cleanup()
 {
     echo "Shutting down..."
