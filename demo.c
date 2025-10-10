@@ -94,6 +94,9 @@ typedef struct {
     /* Tunnel effect optimization LUTs */
     float *tunnel_distance; /* Pre-calculated distance from center */
     float *tunnel_angle;    /* Pre-calculated angle from center */
+    /* Plasma effect optimization */
+    float *plasma_distance; /* Pre-calculated distance for 400x300 plasma */
+    Uint32 *plasma_palette; /* Color palette LUT (256 colors) */
 } DemoContext;
 
 /* Plasma effect - optimized with lower resolution and LUT */
@@ -133,21 +136,20 @@ void render_plasma(DemoContext *ctx)
 			fx = (fx < 0) ? 0 : ((fx >= PLASMA_W * 2) ? PLASMA_W * 2 - 1 : fx);
 			fy = (fy < 0) ? 0 : ((fy >= PLASMA_H * 2) ? PLASMA_H * 2 - 1 : fy);
 
-			/* Use LUT and radial term with proper distance */
-			int dx = x - PLASMA_W / 2;
-			int dy = y - PLASMA_H / 2;
-			float dist = sqrtf(dx * dx + dy * dy);
+			/* Use pre-calculated distance LUT */
+			int idx = y * PLASMA_W + x;
+			float dist = ctx->plasma_distance[idx];
+
+			/* Pre-calculate sin(dist) term once */
+			float dist_sin = sinf(dist * 0.02f + t * 1.2f);
 
 			float v = sinx[fx] + siny[fy] +
 			         sinx[(fx + fy) % (PLASMA_W * 2)] +
-			         sin(dist * 0.02 + t * 1.2);
+			         dist_sin;
 
-			/* Direct color calculation (simpler and more accurate) */
-			int r = (int)(128 + 127 * sin(v * PI));
-			int g = (int)(128 + 127 * sin(v * PI + 2 * PI / 3));
-			int b = (int)(128 + 127 * sin(v * PI + 4 * PI / 3));
-
-			pixels[y * stride + x] = 0xFF000000 | (r << 16) | (g << 8) | b;
+			/* Use color palette LUT - convert value to palette index */
+			int palette_idx = ((int)(v * 32.0f) & 0xFF);
+			pixels[y * stride + x] = ctx->plasma_palette[palette_idx];
 		}
 	}
 
@@ -2723,6 +2725,36 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "Warning: Failed to allocate tunnel LUT\n");
 	}
 
+	/* Initialize plasma LUT for optimization */
+	#define PLASMA_W 400
+	#define PLASMA_H 300
+	ctx.plasma_distance = malloc(PLASMA_W * PLASMA_H * sizeof(float));
+	ctx.plasma_palette = malloc(256 * sizeof(Uint32));
+	if (ctx.plasma_distance && ctx.plasma_palette) {
+		/* Pre-calculate distances for plasma */
+		float center_x = PLASMA_W / 2.0f;
+		float center_y = PLASMA_H / 2.0f;
+		for (int y = 0; y < PLASMA_H; y++) {
+			for (int x = 0; x < PLASMA_W; x++) {
+				int idx = y * PLASMA_W + x;
+				float dx = x - center_x;
+				float dy = y - center_y;
+				ctx.plasma_distance[idx] = sqrtf(dx * dx + dy * dy);
+			}
+		}
+
+		/* Pre-calculate color palette (256 smooth colors) */
+		for (int i = 0; i < 256; i++) {
+			float v = i / 256.0f;
+			int r = (int)(128 + 127 * sinf(v * PI * 2.0f));
+			int g = (int)(128 + 127 * sinf(v * PI * 2.0f + 2.0f * PI / 3.0f));
+			int b = (int)(128 + 127 * sinf(v * PI * 2.0f + 4.0f * PI / 3.0f));
+			ctx.plasma_palette[i] = 0xFF000000 | (r << 16) | (g << 8) | b;
+		}
+	} else {
+		fprintf(stderr, "Warning: Failed to allocate plasma LUT\n");
+	}
+
 	/* Load and play music from embedded data */
 #ifdef HAVE_MUSIC
 	if (audio_available) {
@@ -2886,6 +2918,13 @@ int main(int argc, char *argv[])
 	}
 	if (ctx.tunnel_angle) {
 		free(ctx.tunnel_angle);
+	}
+	/* Free plasma LUT */
+	if (ctx.plasma_distance) {
+		free(ctx.plasma_distance);
+	}
+	if (ctx.plasma_palette) {
+		free(ctx.plasma_palette);
 	}
 	SDL_DestroyTexture(ctx.texture);
 	SDL_DestroyRenderer(ctx.renderer);
