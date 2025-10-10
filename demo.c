@@ -91,6 +91,9 @@ typedef struct {
     float scroll_offset;    /* Accumulated scroll offset */
     float last_frame_time;  /* Time of last frame for delta calculation */
     int roller_effect;      /* Roller text effect: 0=all, 1=no outline, 2=no outline/glow, 3=color outline */
+    /* Tunnel effect optimization LUTs */
+    float *tunnel_distance; /* Pre-calculated distance from center */
+    float *tunnel_angle;    /* Pre-calculated angle from center */
 } DemoContext;
 
 /* Plasma effect - optimized with lower resolution and LUT */
@@ -802,11 +805,16 @@ void render_tunnel(DemoContext *ctx)
 
 	for (int y = 0; y < HEIGHT; y++) {
 		for (int x = 0; x < WIDTH; x++) {
+			int idx = y * WIDTH + x;
+
 			float dx = x - eye_x;
 			float dy = y - eye_y;
 
-			float distance = sqrt(dx * dx + dy * dy);
-			float angle = atan2(dy, dx);
+			float distance = sqrtf(dx * dx + dy * dy);
+			if (distance < 1.0f) distance = 1.0f; /* Avoid division by zero */
+
+			/* Use pre-calculated angle from LUT (reduces atan2 calls) */
+			float angle = ctx->tunnel_angle[idx];
 
 			float u = t * 0.5 + 10.0 / distance;
 			float v = angle / PI + t * 0.2;
@@ -827,7 +835,7 @@ void render_tunnel(DemoContext *ctx)
 			g = (int)(g * vignette);
 			b = (int)(b * vignette);
 
-			ctx->pixels[y * WIDTH + x] = 0xFF000000 | (r << 16) | (g << 8) | b;
+			ctx->pixels[idx] = 0xFF000000 | (r << 16) | (g << 8) | b;
 		}
 	}
 }
@@ -2696,6 +2704,25 @@ int main(int argc, char *argv[])
 		ctx.stars[i].z = (rand() % 10000) / 100.0f;
 	}
 
+	/* Initialize tunnel LUT for optimization */
+	ctx.tunnel_distance = malloc(WIDTH * HEIGHT * sizeof(float));
+	ctx.tunnel_angle = malloc(WIDTH * HEIGHT * sizeof(float));
+	if (ctx.tunnel_distance && ctx.tunnel_angle) {
+		float center_x = WIDTH / 2.0f;
+		float center_y = HEIGHT / 2.0f;
+		for (int y = 0; y < HEIGHT; y++) {
+			for (int x = 0; x < WIDTH; x++) {
+				int idx = y * WIDTH + x;
+				float dx = x - center_x;
+				float dy = y - center_y;
+				ctx.tunnel_distance[idx] = sqrtf(dx * dx + dy * dy);
+				ctx.tunnel_angle[idx] = atan2f(dy, dx);
+			}
+		}
+	} else {
+		fprintf(stderr, "Warning: Failed to allocate tunnel LUT\n");
+	}
+
 	/* Load and play music from embedded data */
 #ifdef HAVE_MUSIC
 	if (audio_available) {
@@ -2852,6 +2879,13 @@ int main(int argc, char *argv[])
 	TTF_CloseFont(ctx.font);
 	if (ctx.font_outline) {
 		TTF_CloseFont(ctx.font_outline);
+	}
+	/* Free tunnel LUT */
+	if (ctx.tunnel_distance) {
+		free(ctx.tunnel_distance);
+	}
+	if (ctx.tunnel_angle) {
+		free(ctx.tunnel_angle);
 	}
 	SDL_DestroyTexture(ctx.texture);
 	SDL_DestroyRenderer(ctx.renderer);
