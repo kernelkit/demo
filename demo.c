@@ -35,6 +35,47 @@ static int HEIGHT = 600;
 #define NUM_STARS 200
 #define MAX_LOGO_PARTICLES 8192
 
+/* Fast math approximations for better performance */
+
+/* Fast inverse square root (Quake III style) - for normalized vectors */
+static inline float fast_inv_sqrt(float x)
+{
+	float xhalf = 0.5f * x;
+	union {
+		float f;
+		int i;
+	} u;
+	u.f = x;
+	u.i = 0x5f3759df - (u.i >> 1);
+	u.f = u.f * (1.5f - xhalf * u.f * u.f);  /* One Newton iteration */
+	return u.f;
+}
+
+/* Fast sqrt using inverse sqrt */
+static inline float fast_sqrt(float x)
+{
+	if (x <= 0.0f) return 0.0f;
+	return x * fast_inv_sqrt(x);
+}
+
+/* Fast sine approximation using Taylor series (good for -PI to PI) */
+static inline float fast_sin(float x)
+{
+	/* Wrap to -PI..PI range */
+	while (x > PI) x -= 2.0f * PI;
+	while (x < -PI) x += 2.0f * PI;
+
+	/* Taylor series: sin(x) ≈ x - x³/6 + x⁵/120 */
+	float x2 = x * x;
+	return x * (1.0f - x2 * (1.0f/6.0f - x2/120.0f));
+}
+
+/* Fast cosine using sin(x + PI/2) */
+static inline float fast_cos(float x)
+{
+	return fast_sin(x + PI/2.0f);
+}
+
 typedef enum {
     SCROLL_NONE,
     SCROLL_SINE_WAVE,
@@ -692,7 +733,7 @@ void render_cube(DemoContext *ctx)
 		float y = vertices[i][1];
 		float z = vertices[i][2];
 
-		/* Rotate around X */
+		/* Rotate around X (need accuracy for texture mapping) */
 		float y1 = y * cos(angle_x) - z * sin(angle_x);
 		float z1 = y * sin(angle_x) + z * cos(angle_x);
 		y = y1;
@@ -780,11 +821,12 @@ void render_cube(DemoContext *ctx)
 				verts[v].color.a = 255;
 			}
 
-			/* UV coordinates - map texture to quad */
-			verts[0].tex_coord.x = 0.0f; verts[0].tex_coord.y = 0.0f;
-			verts[1].tex_coord.x = 1.0f; verts[1].tex_coord.y = 0.0f;
-			verts[2].tex_coord.x = 1.0f; verts[2].tex_coord.y = 1.0f;
-			verts[3].tex_coord.x = 0.0f; verts[3].tex_coord.y = 1.0f;
+			/* UV coordinates - map texture to quad with tiny inset to avoid edge artifacts */
+			float inset = 0.001f;
+			verts[0].tex_coord.x = inset;     verts[0].tex_coord.y = inset;
+			verts[1].tex_coord.x = 1.0f - inset; verts[1].tex_coord.y = inset;
+			verts[2].tex_coord.x = 1.0f - inset; verts[2].tex_coord.y = 1.0f - inset;
+			verts[3].tex_coord.x = inset;     verts[3].tex_coord.y = 1.0f - inset;
 
 			/* Render two triangles to form the quad */
 			int indices[6] = {0, 1, 2, 0, 2, 3};
@@ -812,7 +854,7 @@ void render_tunnel(DemoContext *ctx)
 			float dx = x - eye_x;
 			float dy = y - eye_y;
 
-			float distance = sqrtf(dx * dx + dy * dy);
+			float distance = fast_sqrt(dx * dx + dy * dy);
 			if (distance < 1.0f) distance = 1.0f; /* Avoid division by zero */
 
 			/* Use pre-calculated angle from LUT (reduces atan2 calls) */
@@ -2640,6 +2682,8 @@ int main(int argc, char *argv[])
 			ctx.jack_texture = SDL_CreateTextureFromSurface(ctx.renderer, ctx.jack_surface);
 			SDL_SetTextureBlendMode(ctx.jack_texture, SDL_BLENDMODE_NONE);
 			SDL_SetTextureAlphaMod(ctx.jack_texture, 255);
+			/* Use nearest neighbor to prevent edge artifacts from linear filtering */
+			SDL_SetTextureScaleMode(ctx.jack_texture, SDL_ScaleModeNearest);
 		}
 	}
 
