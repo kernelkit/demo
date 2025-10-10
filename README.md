@@ -243,6 +243,34 @@ Examples:
   demo -r 2 0                # Clean roller effect, starfield only
 ```
 
+## Performance Optimization
+
+### Resolution Scaling
+
+For lower-powered systems (like Raspberry Pi), you can improve performance by rendering at a lower resolution. SDL2 will automatically scale the output to fullscreen or window size:
+
+```bash
+# Render at half resolution (960x540) - ~75% performance gain
+./demo -f -w 960x540
+
+# Render at 720p instead of 1080p - ~50% performance gain
+./demo -f -w 1280x720
+
+# Docker example with performance mode
+docker run --rm -it \
+  --privileged \
+  -v /dev/fb0:/dev/fb0 \
+  -v /dev/tty1:/dev/tty1 \
+  ghcr.io/kernelkit/demo:latest \
+  /app/start.sh -w 960x540
+```
+
+**Tips:**
+- Lower resolutions reduce CPU/GPU load significantly
+- The demo maintains aspect ratio and visual quality during scaling
+- Try different resolutions to find the best balance for your hardware
+- Embedded systems (RPi4) benefit most from 960x540 or 1280x720
+
 ## Customizing Scroll Text
 
 ### Using Custom Text File
