@@ -15,3 +15,18 @@ services:
     network_mode: host
     stdin_open: true
     tty: true
+
+  boring:
+    image: ghcr.io/kernelkit/demo-boring:latest
+    build:
+      context: ./boring
+    environment:
+      - DISPLAY=${DISPLAY}
+      - LATITUDE=${LATITUDE}
+      - LONGITUDE=${LONGITUDE}
+      - WEB_URL=${WEB_URL}
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    network_mode: host
+    stdin_open: true
+    tty: true
