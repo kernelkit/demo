@@ -121,6 +121,49 @@ void weather_format_time(double hours, char *buf, int bufsize)
     snprintf(buf, bufsize, "%02d:%02d", h % 24, m);
 }
 
+const char *weather_wind_compass(double degrees)
+{
+    /* Normalize to 0-360 */
+    while (degrees < 0) degrees += 360;
+    while (degrees >= 360) degrees -= 360;
+
+    /* 16-point compass */
+    static const char *dirs[] = {
+        "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+        "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"
+    };
+    int idx = (int)((degrees + 11.25) / 22.5) % 16;
+
+    return dirs[idx];
+}
+
+const char *weather_wind_arrow(double degrees)
+{
+    /*
+     * Wind direction is where wind comes FROM.
+     * Arrow should point the direction wind is BLOWING TO,
+     * so rotate 180 degrees.
+     */
+    double to = degrees + 180.0;
+
+    while (to >= 360) to -= 360;
+
+    /* 8 Unicode arrows, starting from N (up) going clockwise */
+    static const char *arrows[] = {
+        "\u2193",  /*   0 / N  -> blows south -> down arrow */
+        "\u2199",  /*  45 / NE -> blows SW */
+        "\u2190",  /*  90 / E  -> blows west -> left arrow */
+        "\u2196",  /* 135 / SE -> blows NW */
+        "\u2191",  /* 180 / S  -> blows north -> up arrow */
+        "\u2197",  /* 225 / SW -> blows NE */
+        "\u2192",  /* 270 / W  -> blows east -> right arrow */
+        "\u2198",  /* 315 / NW -> blows SE */
+    };
+    int idx = (int)((to + 22.5) / 45.0) % 8;
+
+    return arrows[idx];
+}
+
 WeatherData weather_fetch(double latitude, double longitude)
 {
     WeatherData data = { .valid = false };
@@ -177,11 +220,13 @@ WeatherData weather_fetch(double latitude, double longitude)
     if (current) {
         cJSON *temp = cJSON_GetObjectItem(current, "temperature");
         cJSON *wind = cJSON_GetObjectItem(current, "windspeed");
+        cJSON *wdir = cJSON_GetObjectItem(current, "winddirection");
         cJSON *code = cJSON_GetObjectItem(current, "weathercode");
         cJSON *isday = cJSON_GetObjectItem(current, "is_day");
 
         if (temp) data.temperature = temp->valuedouble;
         if (wind) data.windspeed = wind->valuedouble;
+        if (wdir) data.winddirection = wdir->valuedouble;
         if (code) data.type = wmo_to_type(code->valueint, &data.intensity);
         if (isday) data.is_day = (isday->valueint != 0);
 

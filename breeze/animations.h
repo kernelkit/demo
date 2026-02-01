@@ -7,6 +7,7 @@
 
 #define ANIM_MAX_CLOUDS    20
 #define ANIM_MAX_PARTICLES 300
+#define ANIM_MAX_STREAKS   15
 
 typedef struct {
     double x, y;
@@ -33,6 +34,10 @@ typedef struct {
     /* Rain / snow particles */
     Particle particles[ANIM_MAX_PARTICLES];
     int      particle_count;
+
+    /* Wind streaks */
+    Particle streaks[ANIM_MAX_STREAKS];
+    int      streak_count;
 
     /* Screen dimensions */
     int width;

@@ -18,6 +18,7 @@ typedef enum {
 typedef struct {
     double      temperature;    /* Celsius */
     double      windspeed;      /* km/h */
+    double      winddirection;  /* degrees, 0=N 90=E 180=S 270=W */
     WeatherType type;
     double      intensity;      /* 0.0 - 1.0 */
     int         cloudcover;     /* 0 - 100 percent */
@@ -39,6 +40,12 @@ const char *weather_description(WeatherType type);
 
 /* Format sunrise/sunset hours as HH:MM string into buf (>= 6 bytes) */
 void weather_format_time(double hours, char *buf, int bufsize);
+
+/* Compass direction string from degrees (e.g. "N", "SW", "ENE") */
+const char *weather_wind_compass(double degrees);
+
+/* Unicode arrow character for wind direction (points the way wind blows) */
+const char *weather_wind_arrow(double degrees);
 
 /*
  * Geocode a location string to lat/lon using Open-Meteo's geocoding API.

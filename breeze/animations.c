@@ -122,6 +122,46 @@ static void update_particles(AnimState *state, double dt)
     }
 }
 
+static void update_streaks(AnimState *state, double dt)
+{
+    /* Wind streaks appear above ~5 m/s, scale up to max at ~15 m/s */
+    double wind_ms = state->weather.windspeed / 3.6;
+    int target = 0;
+
+    if (wind_ms >= 5.0) {
+        double frac = (wind_ms - 5.0) / 10.0;
+
+        if (frac > 1.0) frac = 1.0;
+        target = (int)(frac * ANIM_MAX_STREAKS);
+        if (target < 1) target = 1;
+    }
+
+    while (state->streak_count < target) {
+        Particle *s = &state->streaks[state->streak_count];
+
+        s->x    = -randf() * state->width * 0.3;
+        s->y    = randf() * state->height;
+        s->speed = 150.0 + wind_ms * 20.0 + randf() * 100.0;
+        s->size  = 30.0 + randf() * 50.0;  /* streak length */
+        state->streak_count++;
+    }
+
+    if (state->streak_count > target)
+        state->streak_count = target;
+
+    for (int i = 0; i < state->streak_count; i++) {
+        Particle *s = &state->streaks[i];
+
+        s->x += s->speed * dt;
+
+        if (s->x > state->width + s->size) {
+            s->x = -s->size - randf() * state->width * 0.2;
+            s->y = randf() * state->height;
+            s->speed = 150.0 + wind_ms * 20.0 + randf() * 100.0;
+        }
+    }
+}
+
 void anim_update(AnimState *state, double dt, const WeatherData *weather)
 {
     state->weather = *weather;
@@ -130,6 +170,7 @@ void anim_update(AnimState *state, double dt, const WeatherData *weather)
 
     update_clouds(state, dt);
     update_particles(state, dt);
+    update_streaks(state, dt);
 }
 
 /* ------------------------------------------------------------------ */
@@ -265,11 +306,38 @@ static void draw_snow(const AnimState *state, cairo_t *cr)
     }
 }
 
+static void draw_streaks(const AnimState *state, cairo_t *cr)
+{
+    if (state->streak_count == 0)
+        return;
+
+    cairo_set_line_width(cr, 1.0);
+
+    for (int i = 0; i < state->streak_count; i++) {
+        const Particle *s = &state->streaks[i];
+        /* Fade in/out at edges */
+        double alpha = 0.12 + 0.06 * sin(state->time_accum * 1.5 + i);
+
+        cairo_pattern_t *grad = cairo_pattern_create_linear(
+            s->x - s->size, s->y, s->x, s->y);
+        cairo_pattern_add_color_stop_rgba(grad, 0.0, 1.0, 1.0, 1.0, 0.0);
+        cairo_pattern_add_color_stop_rgba(grad, 0.3, 1.0, 1.0, 1.0, alpha);
+        cairo_pattern_add_color_stop_rgba(grad, 1.0, 1.0, 1.0, 1.0, 0.0);
+
+        cairo_move_to(cr, s->x - s->size, s->y);
+        cairo_line_to(cr, s->x, s->y);
+        cairo_set_source(cr, grad);
+        cairo_stroke(cr);
+        cairo_pattern_destroy(grad);
+    }
+}
+
 void anim_draw(const AnimState *state, cairo_t *cr)
 {
     draw_sky(state, cr);
     draw_sun(state, cr);
     draw_clouds(state, cr);
+    draw_streaks(state, cr);
 
     bool rain = (state->weather.type == WEATHER_RAIN ||
                  state->weather.type == WEATHER_DRIZZLE ||

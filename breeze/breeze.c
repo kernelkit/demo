@@ -31,6 +31,7 @@ typedef struct {
     GtkWidget *time_label;
     GtkWidget *temp_label;
     GtkWidget *desc_label;
+    GtkWidget *wind_label;
     GtkWidget *sun_label;
     GtkWidget *web_view;
 
@@ -108,6 +109,7 @@ static void update_weather_labels(void)
     if (!app.weather.valid) {
         gtk_label_set_text(GTK_LABEL(app.temp_label), "--\u00B0C");
         gtk_label_set_text(GTK_LABEL(app.desc_label), "No data");
+        gtk_label_set_text(GTK_LABEL(app.wind_label), "");
         gtk_label_set_text(GTK_LABEL(app.sun_label), "");
         return;
     }
@@ -118,6 +120,15 @@ static void update_weather_labels(void)
 
     gtk_label_set_text(GTK_LABEL(app.desc_label),
                        weather_description(app.weather.type));
+
+    /* Wind: API gives km/h, display in m/s with direction arrow and compass */
+    double wind_ms = app.weather.windspeed / 3.6;
+    char wind_buf[64];
+    snprintf(wind_buf, sizeof(wind_buf), "%s %.0f m/s %s",
+             weather_wind_arrow(app.weather.winddirection),
+             wind_ms,
+             weather_wind_compass(app.weather.winddirection));
+    gtk_label_set_text(GTK_LABEL(app.wind_label), wind_buf);
 
     char rise[8], set[8], sun_buf[64];
     weather_format_time(app.weather.sunrise, rise, sizeof(rise));
@@ -258,6 +269,11 @@ static GtkWidget *create_weather_view(void)
     gtk_style_context_add_class(gtk_widget_get_style_context(app.desc_label),
                                 "overlay-text");
 
+    app.wind_label = gtk_label_new("");
+    gtk_widget_set_halign(app.wind_label, GTK_ALIGN_CENTER);
+    gtk_style_context_add_class(gtk_widget_get_style_context(app.wind_label),
+                                "overlay-small");
+
     app.sun_label = gtk_label_new("");
     gtk_widget_set_halign(app.sun_label, GTK_ALIGN_CENTER);
     gtk_style_context_add_class(gtk_widget_get_style_context(app.sun_label),
@@ -270,6 +286,7 @@ static GtkWidget *create_weather_view(void)
     gtk_box_pack_start(GTK_BOX(vbox), app.time_label, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(vbox), app.temp_label, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(vbox), app.desc_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(vbox), app.wind_label, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(vbox), app.sun_label, FALSE, FALSE, 10);
 
     /* Overlay: drawing area + labels on top */
