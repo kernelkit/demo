@@ -1,4 +1,4 @@
-SUBDIRS = classic boring
+SUBDIRS = classic breeze
 
 all clean:
 	@for dir in $(SUBDIRS); do \

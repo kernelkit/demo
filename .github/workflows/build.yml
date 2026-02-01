@@ -93,7 +93,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  build-boring-docker:
+  build-breeze-docker:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -119,7 +119,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-boring
+          images: ${{ env.REGISTRY }}/kernelkit/breeze
           tags: |
             type=raw,value=latest
             type=sha,prefix={{branch}}-
@@ -127,7 +127,7 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: ./boring
+          context: ./breeze
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
@@ -166,7 +166,7 @@ jobs:
 
             **Docker images:**
             - `ghcr.io/${{ github.repository }}:latest` (classic demo)
-            - `ghcr.io/${{ github.repository }}-boring:latest` (boring weather display)
+            - `ghcr.io/kernelkit/breeze:latest` (weather display)
 
             Built from commit: ${{ github.sha }}
           artifacts: "artifacts/**/*.AppImage"

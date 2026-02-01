@@ -9,7 +9,7 @@ Two demo applications for trade shows, exhibitions, and kiosk displays.
 A classic demoscene-style demo with multiple visual effects, text scrollers,
 and tracker music.  Built with SDL2 and inspired by 1990s Amiga/PC demos.
 
-### [Boring](boring/README.md) -- Weather & Time Display
+### [Breeze](breeze/README.md) -- Weather & Time Display
 
 A GTK-based weather and time display with animated backgrounds.  Touch
 anywhere to temporarily show a configurable web page (e.g., a dashboard),
@@ -23,11 +23,11 @@ make
 
 # Or build individually
 make -C classic
-make -C boring
+make -C breeze
 
 # Run with Docker Compose
 docker compose up classic
-docker compose up boring
+docker compose up breeze
 ```
 
 ## License

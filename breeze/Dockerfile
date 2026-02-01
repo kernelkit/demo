@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /build
 
-COPY boring.c weather.c weather.h animations.c animations.h \
+COPY breeze.c weather.c weather.h animations.c animations.h \
      sunriset.c sunriset.h Makefile ./
 
 RUN make
@@ -35,7 +35,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY --from=builder /build/boring .
+COPY --from=builder /build/breeze .
 COPY xorg.conf /etc/X11/xorg.conf
 COPY start.sh /app/start.sh
 

@@ -22,7 +22,7 @@ trap cleanup TERM INT
 # Check if X server is already available
 if xdpyinfo -display "${DISPLAY:-:0}" >/dev/null 2>&1; then
     echo "Using existing X server on $DISPLAY"
-    exec dbus-launch ./boring "$@"
+    exec dbus-launch ./breeze "$@"
 else
     echo "No X server found, starting embedded X server..."
     Xorg -noreset +extension GLX +extension RANDR +extension RENDER \
@@ -38,7 +38,7 @@ else
     fi
 
     # WebKitGTK requires a D-Bus session bus
-    DISPLAY=:0 dbus-launch ./boring "$@" &
+    DISPLAY=:0 dbus-launch ./breeze "$@" &
     APPPID=$!
 
     wait $APPPID

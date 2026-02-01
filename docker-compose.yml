@@ -16,14 +16,15 @@ services:
     stdin_open: true
     tty: true
 
-  boring:
-    image: ghcr.io/kernelkit/demo-boring:latest
+  breeze:
+    image: ghcr.io/kernelkit/breeze:latest
     build:
-      context: ./boring
+      context: ./breeze
     environment:
       - DISPLAY=${DISPLAY}
       - LATITUDE=${LATITUDE}
       - LONGITUDE=${LONGITUDE}
+      - LOCATION=${LOCATION}
       - WEB_URL=${WEB_URL}
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix

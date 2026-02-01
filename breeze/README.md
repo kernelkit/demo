@@ -1,4 +1,4 @@
-# Boring -- Weather & Time Display
+# Breeze -- Weather & Time Display
 
 A GTK-based weather and time display with animated Cairo backgrounds.
 Touch anywhere to temporarily show a configurable web page (e.g., a
@@ -10,6 +10,7 @@ seconds.
 - Live weather from [Open-Meteo](https://open-meteo.com/) (no API key needed)
 - Animated backgrounds: sky gradient, sun, clouds, rain, snow
 - Sunrise/sunset times
+- Location lookup by city name (geocoding via Open-Meteo)
 - Touch/click to show a web page (WebKitGTK), auto-returns after 30s
 - Fullscreen kiosk mode
 
@@ -20,13 +21,13 @@ seconds.
 ```bash
 sudo apt install libgtk-3-dev libwebkit2gtk-4.1-dev libsoup-3.0-dev libcjson-dev
 make
-./boring --lat 59.33 --lon 18.07 -f
+./breeze -l Stockholm -f
 ```
 
 ### Run with Docker
 
 ```bash
-docker compose up boring
+docker compose up breeze
 ```
 
 Or standalone:
@@ -36,25 +37,29 @@ docker run --rm -it \
   --privileged \
   -v /dev/fb0:/dev/fb0 \
   -v /dev/tty1:/dev/tty1 \
-  -e LATITUDE=59.33 \
-  -e LONGITUDE=18.07 \
+  -e LOCATION=Stockholm \
   -e WEB_URL=https://example.com \
-  ghcr.io/kernelkit/demo-boring:latest
+  ghcr.io/kernelkit/breeze:latest
 ```
 
 ## Command-Line Options
 
 ```
-Usage: boring [OPTIONS]
+Usage: breeze [OPTIONS]
 
-  -f, --fullscreen     Run in fullscreen mode
-  --lat LATITUDE       Latitude for weather (default: 59.3293)
-  --lon LONGITUDE      Longitude for weather (default: 18.0686)
-  --url URL            Web page URL shown on touch/click
+  -f, --fullscreen         Run in fullscreen mode
+  -l, --location LOCATION  City or Country,City (e.g., "Stockholm"
+                           or "Sweden,Stockholm"), geocoded via Open-Meteo
+  --lat LATITUDE           Latitude for weather (default: 59.3293)
+  --lon LONGITUDE          Longitude for weather (default: 18.0686)
+  --url URL                Web page URL shown on touch/click
+  -h, --help               Show this help message
 ```
 
-Environment variables `LATITUDE`, `LONGITUDE`, and `WEB_URL` are used
-as fallbacks when command-line options are not given.
+Environment variables `LATITUDE`, `LONGITUDE`, `LOCATION`, and `WEB_URL`
+are used as fallbacks when command-line options are not given.
+
+Press Escape to exit.
 
 ## Dependencies
 

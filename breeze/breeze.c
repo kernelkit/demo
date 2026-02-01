@@ -1,5 +1,5 @@
 /*
- * boring -- A "boring" weather & time display with animated backgrounds.
+ * breeze -- Weather & time display with animated backgrounds.
  *
  * Touch/click anywhere to temporarily show a web page, then
  * automatically return to the weather view after 30 seconds.
@@ -390,7 +390,7 @@ int main(int argc, char *argv[])
 
     /* Main window */
     app.window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-    gtk_window_set_title(GTK_WINDOW(app.window), "Boring");
+    gtk_window_set_title(GTK_WINDOW(app.window), "Breeze");
     gtk_window_set_default_size(GTK_WINDOW(app.window), 1024, 600);
     g_signal_connect(app.window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
 
