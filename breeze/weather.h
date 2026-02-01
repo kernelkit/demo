@@ -22,6 +22,7 @@ typedef struct {
     WeatherType type;
     double      intensity;      /* 0.0 - 1.0 */
     int         cloudcover;     /* 0 - 100 percent */
+    int         humidity;       /* 0 - 100 percent (relative) */
     double      precipitation;  /* mm */
     bool        is_day;
     double      sunrise;        /* hours (e.g. 6.5 = 06:30) */

@@ -34,11 +34,13 @@ typedef struct {
     GtkWidget *wind_label;
     GtkWidget *sun_label;
     GtkWidget *web_view;
+    GtkWidget *overlay_vbox;
 
     /* State */
     WeatherData weather;
     AnimState   anim;
     gboolean    fullscreen;
+    double      drift_time;
 
     /* Configuration */
     double      latitude;
@@ -114,8 +116,9 @@ static void update_weather_labels(void)
         return;
     }
 
-    char temp_buf[32];
-    snprintf(temp_buf, sizeof(temp_buf), "%.0f\u00B0C", app.weather.temperature);
+    char temp_buf[64];
+    snprintf(temp_buf, sizeof(temp_buf), "%.0f\u00B0C   \U0001F4A7 %d%%",
+             app.weather.temperature, app.weather.humidity);
     gtk_label_set_text(GTK_LABEL(app.temp_label), temp_buf);
 
     gtk_label_set_text(GTK_LABEL(app.desc_label),
@@ -150,6 +153,17 @@ static gboolean on_draw(GtkWidget *widget, cairo_t *cr, gpointer data)
     return FALSE;
 }
 
+static void on_drawing_area_size_allocate(GtkWidget *widget,
+                                          GdkRectangle *allocation,
+                                          gpointer data)
+{
+    (void)widget;
+    (void)data;
+
+    app.anim.width = allocation->width;
+    app.anim.height = allocation->height;
+}
+
 /* ------------------------------------------------------------------ */
 /* Timers                                                             */
 /* ------------------------------------------------------------------ */
@@ -168,6 +182,22 @@ static gboolean on_clock_tick(gpointer data)
 {
     (void)data;
     update_clock_label();
+
+    /* Slow circular drift of text overlay to prevent screen burn-in.
+     * Full cycle ~5 minutes, radius ~15 pixels -- barely noticeable.
+     * Use opposing margins so the total stays constant and GTK
+     * never sees a negative value or an out-of-bounds allocation. */
+    app.drift_time += 1.0;
+    double period = 300.0;   /* seconds per full circle */
+    double radius = 15.0;    /* pixels */
+    int dx = (int)(sin(app.drift_time * 2.0 * M_PI / period) * radius);
+    int dy = (int)(cos(app.drift_time * 2.0 * M_PI / period) * radius);
+
+    gtk_widget_set_margin_start(app.overlay_vbox,  (int)radius + dx);
+    gtk_widget_set_margin_end(app.overlay_vbox,    (int)radius - dx);
+    gtk_widget_set_margin_top(app.overlay_vbox,    (int)radius + dy);
+    gtk_widget_set_margin_bottom(app.overlay_vbox, (int)radius - dy);
+
     return G_SOURCE_CONTINUE;
 }
 
@@ -209,15 +239,10 @@ static gboolean on_key_press(GtkWidget *widget, GdkEventKey *event,
     return FALSE;
 }
 
-static gboolean on_button_press(GtkWidget *widget, GdkEventButton *event,
-                                gpointer data)
+static void toggle_web_view(void)
 {
-    (void)widget;
-    (void)event;
-    (void)data;
-
     if (!app.web_url || !app.web_url[0])
-        return FALSE;
+        return;
 
     const gchar *current = gtk_stack_get_visible_child_name(GTK_STACK(app.stack));
 
@@ -228,7 +253,7 @@ static gboolean on_button_press(GtkWidget *widget, GdkEventButton *event,
             app.webview_timeout = 0;
         }
         gtk_stack_set_visible_child_name(GTK_STACK(app.stack), "weather");
-        return TRUE;
+        return;
     }
 
     /* Switch to web view */
@@ -238,6 +263,27 @@ static gboolean on_button_press(GtkWidget *widget, GdkEventButton *event,
     if (app.webview_timeout)
         g_source_remove(app.webview_timeout);
     app.webview_timeout = g_timeout_add_seconds(30, on_webview_timeout, NULL);
+}
+
+static gboolean on_button_press(GtkWidget *widget, GdkEventButton *event,
+                                gpointer data)
+{
+    (void)widget;
+    (void)event;
+    (void)data;
+
+    toggle_web_view();
+    return TRUE;
+}
+
+static gboolean on_touch_event(GtkWidget *widget, GdkEventTouch *event,
+                               gpointer data)
+{
+    (void)widget;
+    (void)data;
+
+    if (event->type == GDK_TOUCH_END)
+        toggle_web_view();
 
     return TRUE;
 }
@@ -251,6 +297,8 @@ static GtkWidget *create_weather_view(void)
     /* Drawing area as the background */
     app.drawing_area = gtk_drawing_area_new();
     g_signal_connect(app.drawing_area, "draw", G_CALLBACK(on_draw), NULL);
+    g_signal_connect(app.drawing_area, "size-allocate",
+                     G_CALLBACK(on_drawing_area_size_allocate), NULL);
 
     /* Overlay labels */
     app.time_label = gtk_label_new("--:--");
@@ -283,6 +331,7 @@ static GtkWidget *create_weather_view(void)
     GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
     gtk_widget_set_halign(vbox, GTK_ALIGN_CENTER);
     gtk_widget_set_valign(vbox, GTK_ALIGN_CENTER);
+    app.overlay_vbox = vbox;
     gtk_box_pack_start(GTK_BOX(vbox), app.time_label, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(vbox), app.temp_label, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(vbox), app.desc_label, FALSE, FALSE, 0);
@@ -418,9 +467,13 @@ int main(int argc, char *argv[])
         gtk_window_fullscreen(GTK_WINDOW(app.window));
 
     /* Enable input events on the window */
-    gtk_widget_add_events(app.window, GDK_BUTTON_PRESS_MASK | GDK_KEY_PRESS_MASK);
+    gtk_widget_add_events(app.window,
+                          GDK_BUTTON_PRESS_MASK | GDK_KEY_PRESS_MASK |
+                          GDK_TOUCH_MASK);
     g_signal_connect(app.window, "button-press-event",
                      G_CALLBACK(on_button_press), NULL);
+    g_signal_connect(app.window, "touch-event",
+                     G_CALLBACK(on_touch_event), NULL);
     g_signal_connect(app.window, "key-press-event",
                      G_CALLBACK(on_key_press), NULL);
 
@@ -439,8 +492,8 @@ int main(int argc, char *argv[])
 
     gtk_container_add(GTK_CONTAINER(app.window), app.stack);
 
-    /* Initialize animation */
-    anim_init(&app.anim, 1024, 600);
+    /* Initialize animation -- actual size comes from size-allocate */
+    anim_init(&app.anim, 1024, 600);  /* defaults, overridden on realize */
 
     /* Initial weather fetch */
     app.weather = weather_fetch(app.latitude, app.longitude);

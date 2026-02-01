@@ -175,7 +175,7 @@ WeatherData weather_fetch(double latitude, double longitude)
              "https://api.open-meteo.com/v1/forecast?"
              "latitude=%.4f&longitude=%.4f"
              "&current_weather=true"
-             "&hourly=cloudcover,precipitation",
+             "&hourly=cloudcover,precipitation,relative_humidity_2m",
              latitude, longitude);
 
     session = soup_session_new();
@@ -250,6 +250,12 @@ WeatherData weather_fetch(double latitude, double longitude)
         if (pr_arr && cJSON_GetArraySize(pr_arr) > current_hour) {
             cJSON *pr = cJSON_GetArrayItem(pr_arr, current_hour);
             if (pr) data.precipitation = pr->valuedouble;
+        }
+
+        cJSON *rh_arr = cJSON_GetObjectItem(hourly, "relative_humidity_2m");
+        if (rh_arr && cJSON_GetArraySize(rh_arr) > current_hour) {
+            cJSON *rh = cJSON_GetArrayItem(rh_arr, current_hour);
+            if (rh) data.humidity = rh->valueint;
         }
     }
 
