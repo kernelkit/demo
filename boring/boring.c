@@ -185,6 +185,19 @@ static gboolean on_webview_timeout(gpointer data)
     return G_SOURCE_REMOVE;
 }
 
+static gboolean on_key_press(GtkWidget *widget, GdkEventKey *event,
+                             gpointer data)
+{
+    (void)widget;
+    (void)data;
+
+    if (event->keyval == GDK_KEY_Escape) {
+        gtk_main_quit();
+        return TRUE;
+    }
+    return FALSE;
+}
+
 static gboolean on_button_press(GtkWidget *widget, GdkEventButton *event,
                                 gpointer data)
 {
@@ -277,10 +290,30 @@ static GtkWidget *create_web_view(void)
 /* Argument parsing                                                   */
 /* ------------------------------------------------------------------ */
 
+static void usage(const char *name)
+{
+    printf("Usage: %s [OPTIONS]\n"
+           "\n"
+           "Options:\n"
+           "  -f, --fullscreen         Run in fullscreen mode\n"
+           "  -l, --location LOCATION  City or Country,City (e.g., \"Stockholm\"\n"
+           "                           or \"Sweden,Stockholm\"), geocoded via Open-Meteo\n"
+           "  --lat LATITUDE           Latitude for weather (default: 59.3293)\n"
+           "  --lon LONGITUDE          Longitude for weather (default: 18.0686)\n"
+           "  --url URL                Web page URL shown on touch/click\n"
+           "  -h, --help               Show this help message\n"
+           "\n"
+           "Environment variables LATITUDE, LONGITUDE, LOCATION, and WEB_URL\n"
+           "are used as fallbacks when options are not given.\n"
+           "\n"
+           "Press Escape to exit.\n", name);
+}
+
 static void parse_args(int argc, char *argv[])
 {
     /* Defaults from environment, then fallback */
     const char *env;
+    const char *location = NULL;
 
     env = getenv("LATITUDE");
     app.latitude = env ? atof(env) : 59.3293;       /* Stockholm */
@@ -288,13 +321,23 @@ static void parse_args(int argc, char *argv[])
     env = getenv("LONGITUDE");
     app.longitude = env ? atof(env) : 18.0686;
 
+    env = getenv("LOCATION");
+    if (env) location = env;
+
     env = getenv("WEB_URL");
     app.web_url = env ? strdup(env) : NULL;
 
     app.fullscreen = FALSE;
 
     for (int i = 1; i < argc; i++) {
-        if ((strcmp(argv[i], "--lat") == 0) && i + 1 < argc) {
+        if (strcmp(argv[i], "-h") == 0 ||
+            strcmp(argv[i], "--help") == 0) {
+            usage(argv[0]);
+            exit(0);
+        } else if ((strcmp(argv[i], "-l") == 0 ||
+                    strcmp(argv[i], "--location") == 0) && i + 1 < argc) {
+            location = argv[++i];
+        } else if ((strcmp(argv[i], "--lat") == 0) && i + 1 < argc) {
             app.latitude = atof(argv[++i]);
         } else if ((strcmp(argv[i], "--lon") == 0) && i + 1 < argc) {
             app.longitude = atof(argv[++i]);
@@ -304,6 +347,20 @@ static void parse_args(int argc, char *argv[])
         } else if (strcmp(argv[i], "--fullscreen") == 0 ||
                    strcmp(argv[i], "-f") == 0) {
             app.fullscreen = TRUE;
+        }
+    }
+
+    if (location) {
+        double lat, lon;
+
+        if (weather_geocode(location, &lat, &lon)) {
+            app.latitude = lat;
+            app.longitude = lon;
+            fprintf(stderr, "Location \"%s\" -> %.4f, %.4f\n",
+                    location, lat, lon);
+        } else {
+            fprintf(stderr, "Could not geocode \"%s\", using default coordinates\n",
+                    location);
         }
     }
 }
@@ -343,10 +400,12 @@ int main(int argc, char *argv[])
     if (app.fullscreen)
         gtk_window_fullscreen(GTK_WINDOW(app.window));
 
-    /* Enable button press events on the window */
-    gtk_widget_add_events(app.window, GDK_BUTTON_PRESS_MASK);
+    /* Enable input events on the window */
+    gtk_widget_add_events(app.window, GDK_BUTTON_PRESS_MASK | GDK_KEY_PRESS_MASK);
     g_signal_connect(app.window, "button-press-event",
                      G_CALLBACK(on_button_press), NULL);
+    g_signal_connect(app.window, "key-press-event",
+                     G_CALLBACK(on_key_press), NULL);
 
     /* Stack with two children */
     app.stack = gtk_stack_new();

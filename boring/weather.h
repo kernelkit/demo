@@ -40,4 +40,11 @@ const char *weather_description(WeatherType type);
 /* Format sunrise/sunset hours as HH:MM string into buf (>= 6 bytes) */
 void weather_format_time(double hours, char *buf, int bufsize);
 
+/*
+ * Geocode a location string to lat/lon using Open-Meteo's geocoding API.
+ * Accepts "City" or "Country,City" (e.g., "Stockholm" or "Sweden,Stockholm").
+ * Returns true on success and fills in *latitude and *longitude.
+ */
+bool weather_geocode(const char *location, double *latitude, double *longitude);
+
 #endif /* WEATHER_H */

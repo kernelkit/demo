@@ -234,3 +234,119 @@ WeatherData weather_fetch(double latitude, double longitude)
 
     return data;
 }
+
+bool weather_geocode(const char *location, double *latitude, double *longitude)
+{
+    SoupSession *session;
+    SoupMessage *msg;
+    char url[512];
+    char *city = NULL;
+    char *country = NULL;
+
+    /* Parse "Country,City" or just "City" */
+    const char *comma = strchr(location, ',');
+    if (comma) {
+        country = strndup(location, comma - location);
+        city = strdup(comma + 1);
+        /* Trim leading spaces from city */
+        while (*city == ' ')
+            memmove(city, city + 1, strlen(city));
+    } else {
+        city = strdup(location);
+    }
+
+    /* URL-encode spaces as + for the query */
+    for (char *p = city; *p; p++)
+        if (*p == ' ') *p = '+';
+    if (country)
+        for (char *p = country; *p; p++)
+            if (*p == ' ') *p = '+';
+
+    snprintf(url, sizeof(url),
+             "https://geocoding-api.open-meteo.com/v1/search?name=%s&count=5",
+             city);
+
+    session = soup_session_new();
+    msg = soup_message_new("GET", url);
+    if (!msg) {
+        g_object_unref(session);
+        free(city);
+        free(country);
+        return false;
+    }
+
+    GError *error = NULL;
+    GInputStream *stream = soup_session_send(session, msg, NULL, &error);
+    if (!stream || soup_message_get_status(msg) != 200) {
+        g_clear_error(&error);
+        g_clear_object(&stream);
+        g_object_unref(msg);
+        g_object_unref(session);
+        free(city);
+        free(country);
+        return false;
+    }
+
+    GByteArray *buf = g_byte_array_new();
+    guint8 chunk[4096];
+    gssize n;
+
+    while ((n = g_input_stream_read(stream, chunk, sizeof(chunk), NULL, NULL)) > 0)
+        g_byte_array_append(buf, chunk, n);
+    g_object_unref(stream);
+
+    g_byte_array_append(buf, (const guint8 *)"\0", 1);
+    cJSON *root = cJSON_Parse((const char *)buf->data);
+    g_byte_array_free(buf, TRUE);
+
+    bool found = false;
+    if (root) {
+        cJSON *results = cJSON_GetObjectItem(root, "results");
+        int count = results ? cJSON_GetArraySize(results) : 0;
+
+        /* If country filter given, prefer a match; otherwise take first */
+        for (int i = 0; i < count && !found; i++) {
+            cJSON *item = cJSON_GetArrayItem(results, i);
+            if (country) {
+                cJSON *ctry = cJSON_GetObjectItem(item, "country");
+                if (!ctry || !ctry->valuestring)
+                    continue;
+                if (strcasecmp(ctry->valuestring, country) != 0) {
+                    /* Also try country_code (e.g. "SE") */
+                    cJSON *code = cJSON_GetObjectItem(item, "country_code");
+                    if (!code || !code->valuestring ||
+                        strcasecmp(code->valuestring, country) != 0)
+                        continue;
+                }
+            }
+            cJSON *lat = cJSON_GetObjectItem(item, "latitude");
+            cJSON *lon = cJSON_GetObjectItem(item, "longitude");
+            if (lat && lon) {
+                *latitude = lat->valuedouble;
+                *longitude = lon->valuedouble;
+                found = true;
+            }
+        }
+
+        /* Fall back to first result if country filter didn't match */
+        if (!found && count > 0 && !country) {
+            cJSON *item = cJSON_GetArrayItem(results, 0);
+            cJSON *lat = cJSON_GetObjectItem(item, "latitude");
+            cJSON *lon = cJSON_GetObjectItem(item, "longitude");
+            if (lat && lon) {
+                *latitude = lat->valuedouble;
+                *longitude = lon->valuedouble;
+                found = true;
+            }
+        }
+
+        cJSON_Delete(root);
+    }
+
+    g_object_unref(msg);
+    g_object_unref(session);
+    free(city);
+    free(country);
+
+    return found;
+}
