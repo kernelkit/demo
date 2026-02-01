@@ -1,8 +1,10 @@
 version: '3.8'
 
 services:
-  demo:
+  classic:
     image: ghcr.io/kernelkit/demo:latest
+    build:
+      context: ./classic
     environment:
       - DISPLAY=${DISPLAY}
       - SDL_AUDIODRIVER=pulseaudio

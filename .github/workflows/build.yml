@@ -29,7 +29,7 @@ jobs:
         run: |
           if [ "${{ matrix.arch }}" = "aarch64" ]; then
             docker run --rm --platform linux/arm64 \
-              -v $PWD:/workspace -w /workspace \
+              -v $PWD:/workspace -w /workspace/classic \
               ubuntu:22.04 /bin/bash -c '
                 apt-get update && \
                 apt-get install -y xxd wget libsdl2-dev libsdl2-ttf-dev \
@@ -41,17 +41,17 @@ jobs:
             sudo apt-get update
             sudo apt-get install -y wget libsdl2-dev libsdl2-ttf-dev \
               libsdl2-image-dev libsdl2-mixer-dev squashfs-tools
-            make clean && make
-            ./utils/build-appimage.sh x86_64
+            make -C classic clean && make -C classic
+            cd classic && ./utils/build-appimage.sh x86_64
           fi
 
       - name: Upload AppImage artifact
         uses: actions/upload-artifact@v4
         with:
           name: appimage-${{ matrix.arch }}
-          path: InfixDemo-${{ matrix.arch }}.AppImage
+          path: classic/InfixDemo-${{ matrix.arch }}.AppImage
 
-  build-docker:
+  build-classic-docker:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -85,7 +85,13 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ./classic
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
@@ -123,7 +129,7 @@ jobs:
             - `InfixDemo-aarch64.AppImage` - ARM64 build
 
             **Docker images:**
-            - `ghcr.io/${{ github.repository }}:latest`
+            - `ghcr.io/${{ github.repository }}:latest` (classic demo)
 
             Built from commit: ${{ github.sha }}
           artifacts: "artifacts/**/*.AppImage"

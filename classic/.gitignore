@@ -1,0 +1,10 @@
+demo
+font_data.h
+image_data.h
+infix_data.h
+logo_data.h
+music_data.h
+wires_data.h
+AppDir/
+appimagetool
+InfixDemo-*.AppImage

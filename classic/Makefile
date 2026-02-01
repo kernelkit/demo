@@ -55,14 +55,14 @@ clean:
 	rm -rf AppDir appimagetool InfixDemo-x86_64.AppImage
 
 docker-build:
-	docker build -t demo .
+	docker build -t demo-classic .
 
 docker-run: docker-build
 	xhost +local:docker
 	docker run -it --rm \
 		-e DISPLAY=$(DISPLAY) \
 		-v /tmp/.X11-unix:/tmp/.X11-unix \
-		demo
+		demo-classic
 
 appimage: $(TARGET)
 	@ARCH=$${ARCH:-x86_64}; \
