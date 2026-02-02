@@ -224,7 +224,8 @@ static void draw_sun(const AnimState *state, cairo_t *cr)
 
     double cx = state->width * 0.8;
     double cy = state->height * 0.15;
-    double radius = 40.0;
+    double scale = (state->height < 500) ? state->height / 480.0 : state->height / 600.0;
+    double radius = 40.0 * scale;
 
     /* Rays */
     cairo_save(cr);
@@ -233,22 +234,22 @@ static void draw_sun(const AnimState *state, cairo_t *cr)
     int num_rays = 12;
     for (int i = 0; i < num_rays; i++) {
         double angle = state->sun_ray_angle + i * (2.0 * M_PI / num_rays);
-        double inner = radius + 5.0;
-        double outer = radius + 25.0 + sin(state->time_accum * 2.0 + i) * 8.0;
+        double inner = radius + 5.0 * scale;
+        double outer = radius + 25.0 * scale + sin(state->time_accum * 2.0 + i) * 8.0 * scale;
 
         cairo_move_to(cr, cos(angle) * inner, sin(angle) * inner);
         cairo_line_to(cr, cos(angle) * outer, sin(angle) * outer);
     }
-    cairo_set_source_rgba(cr, 1.0, 0.9, 0.3, 0.6);
-    cairo_set_line_width(cr, 3.0);
+    cairo_set_source_rgba(cr, 1.0, 0.9, 0.3, 0.8);
+    cairo_set_line_width(cr, 3.0 * scale);
     cairo_stroke(cr);
     cairo_restore(cr);
 
     /* Sun disc with radial gradient */
     cairo_pattern_t *sun_grad = cairo_pattern_create_radial(cx, cy, 0, cx, cy, radius);
     cairo_pattern_add_color_stop_rgba(sun_grad, 0.0, 1.0, 1.0, 0.6, 1.0);
-    cairo_pattern_add_color_stop_rgba(sun_grad, 0.7, 1.0, 0.85, 0.2, 0.9);
-    cairo_pattern_add_color_stop_rgba(sun_grad, 1.0, 1.0, 0.7, 0.1, 0.0);
+    cairo_pattern_add_color_stop_rgba(sun_grad, 0.7, 1.0, 0.85, 0.2, 0.95);
+    cairo_pattern_add_color_stop_rgba(sun_grad, 1.0, 1.0, 0.7, 0.1, 0.15);
 
     cairo_arc(cr, cx, cy, radius, 0, 2.0 * M_PI);
     cairo_set_source(cr, sun_grad);
