@@ -35,6 +35,8 @@ typedef struct {
     GtkWidget *sun_label;
     GtkWidget *web_view;
     GtkWidget *overlay_vbox;
+    GtkWidget *loading_label;
+    gboolean   web_loading;
 
     /* State */
     WeatherData weather;
@@ -217,13 +219,38 @@ static gboolean on_weather_tick(gpointer data)
 /* Web view / touch handling                                          */
 /* ------------------------------------------------------------------ */
 
+static gboolean on_webview_timeout(gpointer data);
+
+static void show_web_view(void)
+{
+    gtk_widget_hide(app.loading_label);
+    app.web_loading = FALSE;
+    gtk_stack_set_visible_child_name(GTK_STACK(app.stack), "web");
+
+    if (app.webview_timeout)
+        g_source_remove(app.webview_timeout);
+    app.webview_timeout = g_timeout_add_seconds(30, on_webview_timeout, NULL);
+}
+
 static gboolean on_webview_timeout(gpointer data)
 {
     (void)data;
 
     gtk_stack_set_visible_child_name(GTK_STACK(app.stack), "weather");
+    gtk_widget_hide(app.loading_label);
+    app.web_loading = FALSE;
     app.webview_timeout = 0;
     return G_SOURCE_REMOVE;
+}
+
+static void on_web_load_changed(WebKitWebView *web_view,
+                                WebKitLoadEvent event, gpointer data)
+{
+    (void)web_view;
+    (void)data;
+
+    if (event == WEBKIT_LOAD_FINISHED && app.web_loading)
+        show_web_view();
 }
 
 static gboolean on_key_press(GtkWidget *widget, GdkEventKey *event,
@@ -256,13 +283,18 @@ static void toggle_web_view(void)
         return;
     }
 
-    /* Switch to web view */
-    webkit_web_view_load_uri(WEBKIT_WEB_VIEW(app.web_view), app.web_url);
-    gtk_stack_set_visible_child_name(GTK_STACK(app.stack), "web");
+    if (app.web_loading) {
+        /* Already loading -- cancel */
+        webkit_web_view_stop_loading(WEBKIT_WEB_VIEW(app.web_view));
+        gtk_widget_hide(app.loading_label);
+        app.web_loading = FALSE;
+        return;
+    }
 
-    if (app.webview_timeout)
-        g_source_remove(app.webview_timeout);
-    app.webview_timeout = g_timeout_add_seconds(30, on_webview_timeout, NULL);
+    /* Start loading, stay on weather view until page is ready */
+    app.web_loading = TRUE;
+    gtk_widget_show(app.loading_label);
+    webkit_web_view_load_uri(WEBKIT_WEB_VIEW(app.web_view), app.web_url);
 }
 
 static gboolean on_button_press(GtkWidget *widget, GdkEventButton *event,
@@ -338,10 +370,20 @@ static GtkWidget *create_weather_view(void)
     gtk_box_pack_start(GTK_BOX(vbox), app.wind_label, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(vbox), app.sun_label, FALSE, FALSE, 10);
 
+    /* Loading notification -- shown while web page loads */
+    app.loading_label = gtk_label_new("Loading \u2026");
+    gtk_widget_set_halign(app.loading_label, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(app.loading_label, GTK_ALIGN_END);
+    gtk_widget_set_margin_bottom(app.loading_label, 20);
+    gtk_style_context_add_class(gtk_widget_get_style_context(app.loading_label),
+                                "overlay-small");
+    gtk_widget_set_no_show_all(app.loading_label, TRUE);
+
     /* Overlay: drawing area + labels on top */
     GtkWidget *overlay = gtk_overlay_new();
     gtk_container_add(GTK_CONTAINER(overlay), app.drawing_area);
     gtk_overlay_add_overlay(GTK_OVERLAY(overlay), vbox);
+    gtk_overlay_add_overlay(GTK_OVERLAY(overlay), app.loading_label);
 
     return overlay;
 }
@@ -349,6 +391,8 @@ static GtkWidget *create_weather_view(void)
 static GtkWidget *create_web_view(void)
 {
     app.web_view = webkit_web_view_new();
+    g_signal_connect(app.web_view, "load-changed",
+                     G_CALLBACK(on_web_load_changed), NULL);
     return app.web_view;
 }
 
