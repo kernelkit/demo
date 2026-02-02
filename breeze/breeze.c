@@ -119,7 +119,7 @@ static void update_weather_labels(void)
     }
 
     char temp_buf[64];
-    snprintf(temp_buf, sizeof(temp_buf), "%.0f\u00B0C   \U0001F4A7 %d%%",
+    snprintf(temp_buf, sizeof(temp_buf), "%.0f\u00B0C   RH %d%%",
              app.weather.temperature, app.weather.humidity);
     gtk_label_set_text(GTK_LABEL(app.temp_label), temp_buf);
 
