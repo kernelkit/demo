@@ -393,7 +393,24 @@ static GtkWidget *create_web_view(void)
     app.web_view = webkit_web_view_new();
     g_signal_connect(app.web_view, "load-changed",
                      G_CALLBACK(on_web_load_changed), NULL);
-    return app.web_view;
+
+    /* Transparent overlay captures taps so any touch dismisses the web view.
+     * Without this, WebKit consumes all input events itself. */
+    GtkWidget *dismiss = gtk_event_box_new();
+    gtk_event_box_set_visible_window(GTK_EVENT_BOX(dismiss), FALSE);
+    gtk_widget_set_hexpand(dismiss, TRUE);
+    gtk_widget_set_vexpand(dismiss, TRUE);
+    gtk_widget_add_events(dismiss, GDK_BUTTON_PRESS_MASK | GDK_TOUCH_MASK);
+    g_signal_connect(dismiss, "button-press-event",
+                     G_CALLBACK(on_button_press), NULL);
+    g_signal_connect(dismiss, "touch-event",
+                     G_CALLBACK(on_touch_event), NULL);
+
+    GtkWidget *overlay = gtk_overlay_new();
+    gtk_container_add(GTK_CONTAINER(overlay), app.web_view);
+    gtk_overlay_add_overlay(GTK_OVERLAY(overlay), dismiss);
+
+    return overlay;
 }
 
 /* ------------------------------------------------------------------ */
