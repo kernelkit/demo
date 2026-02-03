@@ -80,6 +80,15 @@ static const char *css_style =
     "  font-size: 28px;"
     "  font-weight: normal;"
     "  text-shadow: 1px 1px 4px rgba(0,0,0,0.7);"
+    "}"
+    "label.overlay-notify {"
+    "  color: #333;"
+    "  font-size: 32px;"
+    "  font-weight: bold;"
+    "  background: rgba(255,200,50,0.9);"
+    "  border: 2px solid rgba(220,140,20,0.9);"
+    "  border-radius: 12px;"
+    "  padding: 12px 32px;"
     "}";
 
 static void apply_css(void)
@@ -370,13 +379,12 @@ static GtkWidget *create_weather_view(void)
     gtk_box_pack_start(GTK_BOX(vbox), app.wind_label, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(vbox), app.sun_label, FALSE, FALSE, 10);
 
-    /* Loading notification -- shown while web page loads */
+    /* Loading notification -- centered overlay, shown while web page loads */
     app.loading_label = gtk_label_new("Loading \u2026");
     gtk_widget_set_halign(app.loading_label, GTK_ALIGN_CENTER);
-    gtk_widget_set_valign(app.loading_label, GTK_ALIGN_END);
-    gtk_widget_set_margin_bottom(app.loading_label, 20);
+    gtk_widget_set_valign(app.loading_label, GTK_ALIGN_CENTER);
     gtk_style_context_add_class(gtk_widget_get_style_context(app.loading_label),
-                                "overlay-small");
+                                "overlay-notify");
     gtk_widget_set_no_show_all(app.loading_label, TRUE);
 
     /* Overlay: drawing area + labels on top */
