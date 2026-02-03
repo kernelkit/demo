@@ -47,7 +47,14 @@ typedef struct {
     /* Configuration */
     double      latitude;
     double      longitude;
-    char       *web_url;
+    char      **web_urls;
+    int         url_count;
+    int         current_url;
+
+    /* Carousel */
+    int         carousel_weather;   /* Seconds to show weather (0 = disabled) */
+    int         carousel_url;       /* Seconds to show each URL (0 = disabled) */
+    guint       carousel_timer;
 
     /* Timer IDs */
     guint       anim_timer;
@@ -229,16 +236,22 @@ static gboolean on_weather_tick(gpointer data)
 /* ------------------------------------------------------------------ */
 
 static gboolean on_webview_timeout(gpointer data);
+static void load_next_url(void);
+static void carousel_restart(void);
 
 static void show_web_view(void)
 {
+    int timeout;
+
     gtk_widget_hide(app.loading_label);
     app.web_loading = FALSE;
     gtk_stack_set_visible_child_name(GTK_STACK(app.stack), "web");
 
     if (app.webview_timeout)
         g_source_remove(app.webview_timeout);
-    app.webview_timeout = g_timeout_add_seconds(30, on_webview_timeout, NULL);
+
+    timeout = app.carousel_url ? app.carousel_url : 30;
+    app.webview_timeout = g_timeout_add_seconds(timeout, on_webview_timeout, NULL);
 }
 
 static gboolean on_webview_timeout(gpointer data)
@@ -249,7 +262,35 @@ static gboolean on_webview_timeout(gpointer data)
     gtk_widget_hide(app.loading_label);
     app.web_loading = FALSE;
     app.webview_timeout = 0;
+
+    if (app.carousel_weather)
+        carousel_restart();
+
     return G_SOURCE_REMOVE;
+}
+
+static gboolean on_carousel_tick(gpointer data)
+{
+    (void)data;
+    const gchar *current = gtk_stack_get_visible_child_name(GTK_STACK(app.stack));
+
+    if (current && g_strcmp0(current, "weather") == 0) {
+        /* Weather is showing -- load next URL */
+        if (app.url_count > 0)
+            load_next_url();
+    }
+    /* URL timeout handled by webview_timeout callback */
+
+    app.carousel_timer = 0;
+    return G_SOURCE_REMOVE;
+}
+
+static void carousel_restart(void)
+{
+    if (app.carousel_timer)
+        g_source_remove(app.carousel_timer);
+    app.carousel_timer = g_timeout_add_seconds(app.carousel_weather,
+                                                on_carousel_tick, NULL);
 }
 
 static void on_web_load_changed(WebKitWebView *web_view,
@@ -275,9 +316,22 @@ static gboolean on_key_press(GtkWidget *widget, GdkEventKey *event,
     return FALSE;
 }
 
+static void load_next_url(void)
+{
+    if (app.url_count == 0)
+        return;
+
+    const char *url = app.web_urls[app.current_url];
+    app.current_url = (app.current_url + 1) % app.url_count;
+
+    app.web_loading = TRUE;
+    gtk_widget_show(app.loading_label);
+    webkit_web_view_load_uri(WEBKIT_WEB_VIEW(app.web_view), url);
+}
+
 static void toggle_web_view(void)
 {
-    if (!app.web_url || !app.web_url[0])
+    if (app.url_count == 0)
         return;
 
     const gchar *current = gtk_stack_get_visible_child_name(GTK_STACK(app.stack));
@@ -289,6 +343,9 @@ static void toggle_web_view(void)
             app.webview_timeout = 0;
         }
         gtk_stack_set_visible_child_name(GTK_STACK(app.stack), "weather");
+
+        if (app.carousel_weather)
+            carousel_restart();
         return;
     }
 
@@ -300,10 +357,13 @@ static void toggle_web_view(void)
         return;
     }
 
-    /* Start loading, stay on weather view until page is ready */
-    app.web_loading = TRUE;
-    gtk_widget_show(app.loading_label);
-    webkit_web_view_load_uri(WEBKIT_WEB_VIEW(app.web_view), app.web_url);
+    /* Stop carousel timer during manual interaction */
+    if (app.carousel_timer) {
+        g_source_remove(app.carousel_timer);
+        app.carousel_timer = 0;
+    }
+
+    load_next_url();
 }
 
 static gboolean on_button_press(GtkWidget *widget, GdkEventButton *event,
@@ -430,18 +490,33 @@ static void usage(const char *name)
     printf("Usage: %s [OPTIONS]\n"
            "\n"
            "Options:\n"
-           "  -f, --fullscreen         Run in fullscreen mode\n"
-           "  -l, --location LOCATION  City or Country,City (e.g., \"Stockholm\"\n"
-           "                           or \"Sweden,Stockholm\"), geocoded via Open-Meteo\n"
-           "  --lat LATITUDE           Latitude for weather (default: 59.3293)\n"
-           "  --lon LONGITUDE          Longitude for weather (default: 18.0686)\n"
-           "  --url URL                Web page URL shown on touch/click\n"
-           "  -h, --help               Show this help message\n"
+           "  -f, --fullscreen              Run in fullscreen mode\n"
+           "  -l, --location LOCATION       City or Country,City (e.g., \"Stockholm\"\n"
+           "                                or \"Sweden,Stockholm\"), geocoded via Open-Meteo\n"
+           "  --lat LATITUDE                Latitude for weather (default: 59.3293)\n"
+           "  --lon LONGITUDE               Longitude for weather (default: 18.0686)\n"
+           "  --url URL                     Web page URL (repeatable for carousel)\n"
+           "  --carousel-weather SECS       Weather display time in carousel mode (default: 60)\n"
+           "  --carousel-url SECS           URL display time in carousel mode (default: 30)\n"
+           "  -h, --help                    Show this help message\n"
            "\n"
            "Environment variables LATITUDE, LONGITUDE, LOCATION, and WEB_URL\n"
            "are used as fallbacks when options are not given.\n"
+           "WEB_URL supports comma-separated URLs for carousel mode.\n"
+           "CAROUSEL_WEATHER and CAROUSEL_URL set carousel intervals.\n"
+           "\n"
+           "Setting any carousel option enables automatic cycling between\n"
+           "weather and web views. Without carousel options, touch/click\n"
+           "manually toggles between views (cycling through URLs round-robin).\n"
            "\n"
            "Press Escape to exit.\n", name);
+}
+
+static void add_url(const char *url)
+{
+    app.url_count++;
+    app.web_urls = realloc(app.web_urls, app.url_count * sizeof(char *));
+    app.web_urls[app.url_count - 1] = strdup(url);
 }
 
 static void parse_args(int argc, char *argv[])
@@ -449,6 +524,7 @@ static void parse_args(int argc, char *argv[])
     /* Defaults from environment, then fallback */
     const char *env;
     const char *location = NULL;
+    gboolean    carousel_set = FALSE;
 
     env = getenv("LATITUDE");
     app.latitude = env ? atof(env) : 59.3293;       /* Stockholm */
@@ -459,8 +535,27 @@ static void parse_args(int argc, char *argv[])
     env = getenv("LOCATION");
     if (env) location = env;
 
+    /* Parse WEB_URL: comma-separated list */
     env = getenv("WEB_URL");
-    app.web_url = env ? strdup(env) : NULL;
+    if (env && env[0]) {
+        char *copy = strdup(env);
+        char *token = strtok(copy, ",");
+        while (token) {
+            /* Trim leading whitespace */
+            while (*token == ' ') token++;
+            if (*token)
+                add_url(token);
+            token = strtok(NULL, ",");
+        }
+        free(copy);
+    }
+
+    /* Carousel env vars */
+    env = getenv("CAROUSEL_WEATHER");
+    if (env) { app.carousel_weather = atoi(env); carousel_set = TRUE; }
+
+    env = getenv("CAROUSEL_URL");
+    if (env) { app.carousel_url = atoi(env); carousel_set = TRUE; }
 
     app.fullscreen = FALSE;
 
@@ -477,12 +572,25 @@ static void parse_args(int argc, char *argv[])
         } else if ((strcmp(argv[i], "--lon") == 0) && i + 1 < argc) {
             app.longitude = atof(argv[++i]);
         } else if ((strcmp(argv[i], "--url") == 0) && i + 1 < argc) {
-            free(app.web_url);
-            app.web_url = strdup(argv[++i]);
+            add_url(argv[++i]);
+        } else if ((strcmp(argv[i], "--carousel-weather") == 0) && i + 1 < argc) {
+            app.carousel_weather = atoi(argv[++i]);
+            carousel_set = TRUE;
+        } else if ((strcmp(argv[i], "--carousel-url") == 0) && i + 1 < argc) {
+            app.carousel_url = atoi(argv[++i]);
+            carousel_set = TRUE;
         } else if (strcmp(argv[i], "--fullscreen") == 0 ||
                    strcmp(argv[i], "-f") == 0) {
             app.fullscreen = TRUE;
         }
+    }
+
+    /* Apply carousel defaults if any carousel option was set */
+    if (carousel_set) {
+        if (!app.carousel_weather)
+            app.carousel_weather = 60;
+        if (!app.carousel_url)
+            app.carousel_url = 30;
     }
 
     if (location) {
@@ -574,9 +682,15 @@ int main(int argc, char *argv[])
     app.clock_timer   = g_timeout_add_seconds(1, on_clock_tick, NULL);
     app.weather_timer = g_timeout_add_seconds(300, on_weather_tick, NULL); /* 5 min */
 
+    /* Start carousel if enabled and URLs are configured */
+    if (app.carousel_weather && app.url_count > 0)
+        carousel_restart();
+
     gtk_widget_show_all(app.window);
     gtk_main();
 
-    free(app.web_url);
+    for (int i = 0; i < app.url_count; i++)
+        free(app.web_urls[i]);
+    free(app.web_urls);
     return 0;
 }
