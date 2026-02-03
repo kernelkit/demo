@@ -37,6 +37,8 @@ docker run --rm -it \
   --privileged \
   -v /dev/fb0:/dev/fb0 \
   -v /dev/tty1:/dev/tty1 \
+  -v /dev/input:/dev/input \
+  -v /run/udev:/run/udev:ro \
   -e LOCATION=Stockholm \
   -e WEB_URL=https://example.com \
   ghcr.io/kernelkit/breeze:latest

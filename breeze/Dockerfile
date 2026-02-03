@@ -29,6 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     xorg \
     xinit \
+    xserver-xorg-input-libinput \
     dbus-x11 \
     x11-xserver-utils \
     && rm -rf /var/lib/apt/lists/*
