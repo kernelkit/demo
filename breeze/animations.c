@@ -222,8 +222,8 @@ static void draw_sun(const AnimState *state, cairo_t *cr)
     if (state->weather.type != WEATHER_CLEAR && state->weather.type != WEATHER_PARTLY)
         return;
 
-    double cx = state->width * 0.8;
-    double cy = state->height * 0.15;
+    double cx = state->width * 0.75;
+    double cy = state->height * 0.2;
     double scale = (state->height < 500) ? state->height / 480.0 : state->height / 600.0;
     double radius = 40.0 * scale;
 
