@@ -231,6 +231,11 @@ static gboolean on_anim_tick(gpointer data)
 {
     (void)data;
     double dt = 0.033;     /* ~30 fps */
+    const gchar *shown = gtk_stack_get_visible_child_name(GTK_STACK(app.stack));
+
+    /* Nothing to animate behind the web view */
+    if (shown && g_strcmp0(shown, "weather") != 0)
+	return G_SOURCE_CONTINUE;
 
     anim_update(&app.anim, dt, &app.weather);
     gtk_widget_queue_draw(app.drawing_area);
