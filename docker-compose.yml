@@ -28,6 +28,8 @@ services:
       - WEB_URL=${WEB_URL}
       - CAROUSEL_WEATHER=${CAROUSEL_WEATHER:-}
       - CAROUSEL_URL=${CAROUSEL_URL:-}
+      - URL_SCRIPT=${URL_SCRIPT:-}
+      - ZOOM=${ZOOM:-}
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix
       # Without this the container runs in UTC and shows the wrong time

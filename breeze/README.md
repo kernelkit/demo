@@ -86,6 +86,9 @@ Options:
       --url URL                 Web page URL (repeatable for carousel)
       --carousel-weather SECS   Weather display time in carousel mode (default: 60)
       --carousel-url SECS       URL display time in carousel mode (default: 30)
+      --url-script JS|FILE      JavaScript to run over each page once it
+                                has loaded, inline or read from a file
+      --zoom FACTOR             Web view zoom, e.g. 0.85 to fit more in
       --weather TYPE            Force a condition, for demos: clear, partly,
                                 overcast, fog, drizzle, rain, snow, showers,
                                 thunder
@@ -105,6 +108,48 @@ the views manually, stepping through the URLs round-robin.
 
 Press Escape to exit.
 
+### Fitting a Page to the Screen
+
+Dashboards are built for a desktop, and on a 7" panel their navigation
+can eat a third of the display.  `--zoom` scales the whole page, and
+`--url-script` runs a snippet of JavaScript over each page once it has
+loaded, which is the hook for folding away a sidebar, dismissing a
+cookie banner, or hiding a header.
+
+[Formula 1 Dashboard](https://formula1dashboard.com/) takes no URL
+parameters for this, but its sidebar answers to Ctrl-B, and a synthetic
+key event is as good as a real one:
+
+```js
+/* collapse.js -- fold away the sidebar, it costs a third of the panel */
+(function () {
+	var tries = 0;
+	var timer = setInterval(function () {
+		if (!document.querySelector('[data-state="expanded"]') || ++tries > 20) {
+			clearInterval(timer);
+			return;
+		}
+		window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', ctrlKey: true }));
+	}, 700);
+})();
+```
+
+```bash
+./breeze -l Surahammar -f --zoom 0.85 \
+    --url https://app.formula1dashboard.com/ --url-script collapse.js
+```
+
+On an 800x480 panel that turns one and a half visible cards into six.
+
+The snippet runs once per page load, and a page is usually still
+settling at that point -- which is why the example keeps asking until
+the sidebar reacts and then stops.  Write it so that running it twice
+is harmless: a bare `dispatchEvent` here would toggle the sidebar back
+open on the next pass.
+
+For the container, where mounting a file is a nuisance, `URL_SCRIPT`
+takes the snippet itself just as well.
+
 ## Environment Variables
 
 Every option has an environment variable counterpart, used when the
@@ -120,6 +165,8 @@ configured.
 | `WEB_URL`          | `--url`              | Comma-separated list of URLs                  |
 | `CAROUSEL_WEATHER` | `--carousel-weather` | Seconds to show the weather view              |
 | `CAROUSEL_URL`     | `--carousel-url`     | Seconds to show each URL                      |
+| `URL_SCRIPT`       | `--url-script`       | JavaScript to run over each loaded page       |
+| `ZOOM`             | `--zoom`             | Web view zoom factor                          |
 | `WEATHER`          | `--weather`          | Force a condition, for demos                  |
 
 Two more are read by `start.sh` and the C library rather than by breeze

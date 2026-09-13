@@ -51,6 +51,10 @@ typedef struct {
 	int url_count;
 	int current_url;
 
+	/* Run over each page once it has loaded, NULL when unset */
+	char *url_script;
+	double zoom;
+
 	/* Forced weather for demos, -1 when off */
 	int demo_weather;
 	int demo_cover;
@@ -395,12 +399,37 @@ static void carousel_restart(void)
 	app.carousel_timer = g_timeout_add_seconds(app.carousel_weather, on_carousel_tick, NULL);
 }
 
+/*
+ * Pages meant for a desktop rarely fit a 7" panel.  This is the hook to
+ * fold away a sidebar, dismiss a banner, or hide a header: the snippet
+ * runs once per page, so it has to find its own footing on a page that
+ * may still be settling.  See the README for an example that keeps
+ * trying until the page reacts.
+ */
+static void run_url_script(void)
+{
+	if (!app.url_script)
+		return;
+
+#if WEBKIT_CHECK_VERSION(2, 40, 0)
+	webkit_web_view_evaluate_javascript(WEBKIT_WEB_VIEW(app.web_view), app.url_script, -1, NULL, NULL,
+	                                    NULL, NULL, NULL);
+#else
+	webkit_web_view_run_javascript(WEBKIT_WEB_VIEW(app.web_view), app.url_script, NULL, NULL, NULL);
+#endif
+}
+
 static void on_web_load_changed(WebKitWebView *web_view, WebKitLoadEvent event, gpointer data)
 {
 	(void)web_view;
 	(void)data;
 
-	if (event == WEBKIT_LOAD_FINISHED && app.web_loading)
+	if (event != WEBKIT_LOAD_FINISHED)
+		return;
+
+	run_url_script();
+
+	if (app.web_loading)
 		show_web_view();
 }
 
@@ -553,6 +582,8 @@ static GtkWidget *create_weather_view(void)
 static GtkWidget *create_web_view(void)
 {
 	app.web_view = webkit_web_view_new();
+	if (app.zoom > 0.0)
+		webkit_web_view_set_zoom_level(WEBKIT_WEB_VIEW(app.web_view), app.zoom);
 	g_signal_connect(app.web_view, "load-changed", G_CALLBACK(on_web_load_changed), NULL);
 
 	/* Transparent overlay captures taps so any touch dismisses the web view.
@@ -589,6 +620,9 @@ static void usage(const char *name)
 	       "      --url URL                 Web page URL (repeatable for carousel)\n"
 	       "      --carousel-weather SECS   Weather display time in carousel mode (default: 60)\n"
 	       "      --carousel-url SECS       URL display time in carousel mode (default: 30)\n"
+	       "      --url-script JS|FILE      JavaScript to run over each page once it\n"
+	       "                                has loaded, inline or read from a file\n"
+	       "      --zoom FACTOR             Web view zoom, e.g. 0.85 to fit more in\n"
 	       "      --weather TYPE            Force a condition, for demos: clear, partly,\n"
 	       "                                overcast, fog, drizzle, rain, snow, showers,\n"
 	       "                                thunder\n"
@@ -602,6 +636,8 @@ static void usage(const char *name)
 	       "  WEB_URL                       Comma-separated list of URLs\n"
 	       "  CAROUSEL_WEATHER              Same as --carousel-weather\n"
 	       "  CAROUSEL_URL                  Same as --carousel-url\n"
+	       "  URL_SCRIPT                    Same as --url-script\n"
+	       "  ZOOM                          Same as --zoom\n"
 	       "  WEATHER                       Same as --weather\n"
 	       "\n"
 	       "Setting any carousel option enables automatic cycling between\n"
@@ -630,6 +666,29 @@ static gboolean env_bool(const char *name)
 
 	return g_ascii_strcasecmp(val, "0") != 0 && g_ascii_strcasecmp(val, "false") != 0 &&
 	       g_ascii_strcasecmp(val, "no") != 0 && g_ascii_strcasecmp(val, "off") != 0;
+}
+
+/* Take the argument as a file when it names one, otherwise verbatim */
+static char *load_script(const char *arg)
+{
+	char *body = NULL;
+
+	if (g_file_test(arg, G_FILE_TEST_IS_REGULAR) && g_file_get_contents(arg, &body, NULL, NULL))
+		return body;
+
+	return g_strdup(arg);
+}
+
+static double parse_zoom(const char *arg)
+{
+	double z = atof(arg);
+
+	if (z < 0.2 || z > 5.0) {
+		fprintf(stderr, "Zoom %s out of range, using 1.0\n", arg);
+		return 1.0;
+	}
+
+	return z;
 }
 
 static int parse_weather(const char *name)
@@ -698,6 +757,14 @@ static void parse_args(int argc, char *argv[])
 
 	app.fullscreen = env_bool("FULLSCREEN");
 
+	env = env_str("URL_SCRIPT");
+	if (env)
+		app.url_script = load_script(env);
+
+	env = env_str("ZOOM");
+	if (env)
+		app.zoom = parse_zoom(env);
+
 	app.demo_weather = -1;
 	env = env_str("WEATHER");
 	if (env)
@@ -712,7 +779,9 @@ static void parse_args(int argc, char *argv[])
 		{ "location",         required_argument, NULL, 'l' },
 		{ "lon",              required_argument, NULL, 'o' },
 		{ "url",              required_argument, NULL, 'u' },
+		{ "url-script",       required_argument, NULL, 'S' },
 		{ "weather",          required_argument, NULL, 'w' },
+		{ "zoom",             required_argument, NULL, 'z' },
 		{ NULL,               0,                 NULL, 0   }
 	};
 	int c;
@@ -733,7 +802,12 @@ static void parse_args(int argc, char *argv[])
 		case 'l': location = optarg; break;
 		case 'o': app.longitude = atof(optarg); break;
 		case 'u': add_url(optarg); break;
+		case 'S':
+			g_free(app.url_script);
+			app.url_script = load_script(optarg);
+			break;
 		case 'w': app.demo_weather = parse_weather(optarg); break;
+		case 'z': app.zoom = parse_zoom(optarg); break;
 		default: usage(argv[0]); exit(1);
 		}
 	}
