@@ -27,6 +27,22 @@ rotate()
     OUTPUT=$(xrandr | grep " connected" | head -1 | cut -d' ' -f1)
     [ -n "$OUTPUT" ] || return 0
     xrandr --output "$OUTPUT" --rotate "$DISPLAY_ROTATE"
+
+    # xrandr leaves touch coordinates unrotated, that needs a matrix
+    case "$DISPLAY_ROTATE" in
+	left)     MATRIX="0 -1 1 1 0 0 0 0 1" ;;
+	right)    MATRIX="0 1 0 -1 0 1 0 0 1" ;;
+	inverted) MATRIX="-1 0 1 0 -1 1 0 0 1" ;;
+	*)        MATRIX="1 0 0 0 1 0 0 0 1"  ;;
+    esac
+
+    # Only touch devices carry a libinput calibration matrix
+    xinput --list --name-only | while read -r DEV; do
+	xinput list-props "$DEV" 2>/dev/null |
+	    grep -q "libinput Calibration Matrix" || continue
+	echo "Rotating touch input on \"$DEV\""
+	xinput set-prop "$DEV" "Coordinate Transformation Matrix" $MATRIX
+    done
 }
 
 # Check if X server is already available

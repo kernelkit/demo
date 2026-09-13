@@ -32,6 +32,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xserver-xorg-input-libinput \
     dbus-x11 \
     x11-xserver-utils \
+    xinput \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
