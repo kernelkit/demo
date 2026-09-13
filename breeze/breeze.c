@@ -165,7 +165,7 @@ static const struct {
 static void apply_demo_weather(void)
 {
     if (app.demo_weather < 0)
-	return;
+        return;
 
     app.weather.valid = true;
     app.weather.type = (WeatherType)app.demo_weather;
@@ -246,7 +246,7 @@ static gboolean on_anim_tick(gpointer data)
 
     /* Nothing to animate behind the web view */
     if (shown && g_strcmp0(shown, "weather") != 0)
-	return G_SOURCE_CONTINUE;
+        return G_SOURCE_CONTINUE;
 
     anim_update(&app.anim, dt, &app.weather);
     gtk_widget_queue_draw(app.drawing_area);
@@ -641,10 +641,10 @@ static gboolean env_bool(const char *name)
 static int parse_weather(const char *name)
 {
     for (size_t i = 0; i < sizeof(demo_types) / sizeof(demo_types[0]); i++) {
-	if (g_ascii_strcasecmp(name, demo_types[i].name) == 0) {
-	    app.demo_cover = demo_types[i].cover;
-	    return (int)demo_types[i].type;
-	}
+        if (g_ascii_strcasecmp(name, demo_types[i].name) == 0) {
+            app.demo_cover = demo_types[i].cover;
+            return (int)demo_types[i].type;
+        }
     }
 
     fprintf(stderr, "Unknown weather type \"%s\"\n", name);
@@ -700,7 +700,7 @@ static void parse_args(int argc, char *argv[])
     app.demo_weather = -1;
     env = env_str("WEATHER");
     if (env)
-	app.demo_weather = parse_weather(env);
+        app.demo_weather = parse_weather(env);
 
     static const struct option long_opts[] = {
         { "carousel-url",     required_argument, NULL, 'c' },
