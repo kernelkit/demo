@@ -8,8 +8,12 @@ between the two on its own.
 ## Features
 
 - Live weather from [Open-Meteo](https://open-meteo.com/) (no API key needed)
-- Animated backgrounds: sky gradient, sun, clouds, rain, snow
-- Sunrise/sunset times
+- A sky that follows the sun: night, blue hour, dawn, golden hour, midday
+- Sun and moon ride the arc between sunrise and sunset, the moon drawn at
+  its real phase, over stars and the occasional shooting star
+- Clouds lit from the sun's side, drifting in three layers over a horizon
+- Weather you can see: rain and snow slanting with the wind, splashes,
+  snow settling on the ridge, fog banks, lightning
 - Location lookup by city name (geocoding via Open-Meteo)
 - Touch/click to show a web page (WebKitGTK), auto-returns after 30s
 - Carousel mode: cycle between the weather view and one or more URLs
@@ -70,7 +74,17 @@ Options:
       --url URL                 Web page URL (repeatable for carousel)
       --carousel-weather SECS   Weather display time in carousel mode (default: 60)
       --carousel-url SECS       URL display time in carousel mode (default: 30)
+      --weather TYPE            Force a condition, for demos: clear, partly,
+                                overcast, fog, drizzle, rain, snow, showers,
+                                thunder
   -h, --help                    Show this help message
+```
+
+`--weather` paints a condition over whatever the forecast says, which is
+how to show a thunderstorm on a stand in fair weather:
+
+```bash
+./breeze -l Stockholm -f --weather thunder
 ```
 
 Setting either carousel option enables automatic cycling between the
@@ -94,6 +108,7 @@ configured.
 | `WEB_URL`          | `--url`              | Comma-separated list of URLs                  |
 | `CAROUSEL_WEATHER` | `--carousel-weather` | Seconds to show the weather view              |
 | `CAROUSEL_URL`     | `--carousel-url`     | Seconds to show each URL                      |
+| `WEATHER`          | `--weather`          | Force a condition, for demos                  |
 
 Two more are read by `start.sh` and the C library rather than by breeze
 itself:
@@ -130,6 +145,22 @@ or `right` depending on which way up.
 
 Rotation is applied whether breeze starts its own X server or attaches
 to one that is already running.
+
+## Display Load
+
+The scene is drawn with Cairo through the X server, so most of the cost
+lands in Xorg rather than in breeze.  The layers that change slowly --
+the sky, the hills, the vignette, and each cloud -- are painted into
+surfaces and blitted, and repainted only when the light has moved on.
+Measured at 1024x600 under Xvfb, as a percentage of one core:
+
+| Condition | breeze | X server |
+|-----------|--------|----------|
+| Clear     | 1.1    | 8.1      |
+| Overcast  | 1.1    | 10.0     |
+| Snow      | 4.7    | 9.8      |
+
+The animation stops entirely while the web view is up.
 
 ## Dependencies
 
