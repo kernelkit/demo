@@ -16,6 +16,8 @@ anywhere to temporarily show a configurable web page (e.g., a dashboard),
 then automatically return to the weather view.  Or let it cycle between
 the two on a carousel.
 
+[![Breeze](breeze/screenshots/thumbs/sunset.png)](breeze/screenshots/sunset.png)
+
 ## Quick Start
 
 ```bash

@@ -5,6 +5,18 @@ Touch anywhere to show a configurable web page (e.g., a dashboard), then
 return to the weather view.  Given a carousel interval, breeze cycles
 between the two on its own.
 
+## Screenshots
+
+Click any image for the full-size version.  The bottom four were coaxed
+out of a fair-weather forecast with `--weather`.
+
+|   |   |
+|---|---|
+| [![Dawn](screenshots/thumbs/dawn.png)](screenshots/dawn.png)<br>**Dawn** -- the sky is keyed on the sun's altitude, so the light moves all day | [![Midday](screenshots/thumbs/midday.png)](screenshots/midday.png)<br>**Midday** -- the sun rides the arc between sunrise and sunset |
+| [![Sunset](screenshots/thumbs/sunset.png)](screenshots/sunset.png)<br>**Sunset** -- a low sun lights the clouds from the side and warms their undersides | [![Clear night](screenshots/thumbs/night.png)](screenshots/night.png)<br>**Clear night** -- the moon at its real phase with earthshine, stars, and a shooting star |
+| [![Rain](screenshots/thumbs/rain.png)](screenshots/rain.png)<br>**Rain** -- drops slant with the wind and splash where they land | [![Snow](screenshots/thumbs/snow.png)](screenshots/snow.png)<br>**Snow** -- settling along the ridge |
+| [![Thunderstorm](screenshots/thumbs/thunder.png)](screenshots/thunder.png)<br>**Thunderstorm** -- a bolt and a flash every few seconds | [![Fog](screenshots/thumbs/fog.png)](screenshots/fog.png)<br>**Fog** -- a veil thickening towards the ground |
+
 ## Features
 
 - Live weather from [Open-Meteo](https://open-meteo.com/) (no API key needed)
