@@ -743,6 +743,34 @@ static void parse_args(int argc, char *argv[])
 /* Main                                                               */
 /* ------------------------------------------------------------------ */
 
+/*
+ * gtk_window_fullscreen() asks the window manager to do the work, and a
+ * kiosk started straight on top of X has no window manager to ask.  The
+ * window then keeps its default size, which on a smaller panel leaves
+ * the right and bottom edges hanging off the screen.  Size it to the
+ * monitor ourselves; where a window manager does exist it takes over
+ * and this does no harm.
+ */
+static void size_to_monitor(void)
+{
+	GdkDisplay *display = gdk_display_get_default();
+	GdkMonitor *monitor;
+	GdkRectangle geom;
+
+	if (!display)
+		return;
+
+	monitor = gdk_display_get_primary_monitor(display);
+	if (!monitor)
+		monitor = gdk_display_get_monitor(display, 0);
+	if (!monitor)
+		return;
+
+	gdk_monitor_get_geometry(monitor, &geom);
+	gtk_window_move(GTK_WINDOW(app.window), geom.x, geom.y);
+	gtk_window_resize(GTK_WINDOW(app.window), geom.width, geom.height);
+}
+
 static void on_realize(GtkWidget *widget, gpointer data)
 {
 	(void)data;
@@ -771,8 +799,10 @@ int main(int argc, char *argv[])
 	/* Hide cursor */
 	g_signal_connect(app.window, "realize", G_CALLBACK(on_realize), NULL);
 
-	if (app.fullscreen)
+	if (app.fullscreen) {
+		gtk_window_set_decorated(GTK_WINDOW(app.window), FALSE);
 		gtk_window_fullscreen(GTK_WINDOW(app.window));
+	}
 
 	/* Enable input events on the window */
 	gtk_widget_add_events(app.window, GDK_BUTTON_PRESS_MASK | GDK_KEY_PRESS_MASK | GDK_TOUCH_MASK);
@@ -813,6 +843,10 @@ int main(int argc, char *argv[])
 		carousel_restart();
 
 	gtk_widget_show_all(app.window);
+
+	if (app.fullscreen)
+		size_to_monitor();
+
 	gtk_main();
 
 	for (int i = 0; i < app.url_count; i++)
