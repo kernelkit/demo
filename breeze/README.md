@@ -1,9 +1,9 @@
 # Breeze -- Weather & Time Display
 
 A GTK-based weather and time display with animated Cairo backgrounds.
-Touch anywhere to temporarily show a configurable web page (e.g., a
-dashboard), then automatically return to the weather view after 30
-seconds.
+Touch anywhere to show a configurable web page (e.g., a dashboard), then
+return to the weather view.  Given a carousel interval, breeze cycles
+between the two on its own.
 
 ## Features
 
@@ -12,7 +12,8 @@ seconds.
 - Sunrise/sunset times
 - Location lookup by city name (geocoding via Open-Meteo)
 - Touch/click to show a web page (WebKitGTK), auto-returns after 30s
-- Fullscreen kiosk mode
+- Carousel mode: cycle between the weather view and one or more URLs
+- Fullscreen kiosk mode, display rotation, and burn-in protection
 
 ## Quick Start
 
@@ -22,6 +23,15 @@ seconds.
 sudo apt install libgtk-3-dev libwebkit2gtk-4.1-dev libsoup-3.0-dev libcjson-dev
 make
 ./breeze -l Stockholm -f
+```
+
+Two URLs, each shown for 30 seconds with a minute of weather in between:
+
+```bash
+./breeze -l Surahammar -f \
+    --url https://app.formula1dashboard.com/ \
+    --url https://www.yr.no/en/forecast/hourly-table/2-2670613/Sweden/V%C3%A4stmanland%20County/Surahammar%20Municipality/Surahammar \
+    --carousel-weather 60 --carousel-url 30
 ```
 
 ### Run with Docker
@@ -39,8 +49,10 @@ docker run --rm -it \
   -v /dev/tty1:/dev/tty1 \
   -v /dev/input:/dev/input \
   -v /run/udev:/run/udev:ro \
+  -v /etc/localtime:/etc/localtime:ro \
   -e LOCATION=Stockholm \
   -e WEB_URL=https://example.com \
+  -e DISPLAY_ROTATE=right \
   ghcr.io/kernelkit/breeze:latest
 ```
 
@@ -49,19 +61,75 @@ docker run --rm -it \
 ```
 Usage: breeze [OPTIONS]
 
-  -f, --fullscreen         Run in fullscreen mode
-  -l, --location LOCATION  City or Country,City (e.g., "Stockholm"
-                           or "Sweden,Stockholm"), geocoded via Open-Meteo
-  --lat LATITUDE           Latitude for weather (default: 59.3293)
-  --lon LONGITUDE          Longitude for weather (default: 18.0686)
-  --url URL                Web page URL shown on touch/click
-  -h, --help               Show this help message
+Options:
+  -f, --fullscreen              Run in fullscreen mode
+  -l, --location LOCATION       City or Country,City (e.g., "Stockholm"
+                                or "Sweden,Stockholm"), geocoded via Open-Meteo
+      --lat LATITUDE            Latitude for weather (default: 59.3293)
+      --lon LONGITUDE           Longitude for weather (default: 18.0686)
+      --url URL                 Web page URL (repeatable for carousel)
+      --carousel-weather SECS   Weather display time in carousel mode (default: 60)
+      --carousel-url SECS       URL display time in carousel mode (default: 30)
+  -h, --help                    Show this help message
 ```
 
-Environment variables `LATITUDE`, `LONGITUDE`, `LOCATION`, and `WEB_URL`
-are used as fallbacks when command-line options are not given.
+Setting either carousel option enables automatic cycling between the
+weather view and the URLs.  Without them, touch/click toggles between
+the views manually, stepping through the URLs round-robin.
 
 Press Escape to exit.
+
+## Environment Variables
+
+Every option has an environment variable counterpart, used when the
+option is not given on the command line.  This is how the container is
+configured.
+
+| Variable           | Option               | Description                                   |
+|--------------------|----------------------|-----------------------------------------------|
+| `FULLSCREEN`       | `-f`                 | Fullscreen mode: `1`, `true`, `yes`, or `on`  |
+| `LOCATION`         | `-l`                 | City or Country,City, geocoded via Open-Meteo |
+| `LATITUDE`         | `--lat`              | Latitude, when `LOCATION` is not used         |
+| `LONGITUDE`        | `--lon`              | Longitude, when `LOCATION` is not used        |
+| `WEB_URL`          | `--url`              | Comma-separated list of URLs                  |
+| `CAROUSEL_WEATHER` | `--carousel-weather` | Seconds to show the weather view              |
+| `CAROUSEL_URL`     | `--carousel-url`     | Seconds to show each URL                      |
+
+Two more are read by `start.sh` and the C library rather than by breeze
+itself:
+
+| Variable         | Description                                                |
+|------------------|------------------------------------------------------------|
+| `DISPLAY_ROTATE` | `normal`, `left`, `right`, or `inverted`                   |
+| `TZ`             | Timezone, e.g. `Europe/Stockholm`                          |
+
+### Timezone
+
+A container has no timezone of its own, it runs in UTC, which puts the
+clock and the sunrise/sunset times an hour or two off in Sweden.  Either
+bind mount the host's zone file, the way `docker-compose.yml` does:
+
+```bash
+-v /etc/localtime:/etc/localtime:ro
+```
+
+or name the zone, which is what to do where there is no host zone file
+to mount:
+
+```bash
+-e TZ=Europe/Stockholm
+```
+
+### Display Rotation
+
+`DISPLAY_ROTATE` turns the screen a quarter, half, or three quarters of
+a turn, and takes the touchscreen with it -- the two are separate in X,
+so rotating the display alone leaves taps landing in the wrong place.
+The official Raspberry Pi touch display, mounted portrait, wants `left`
+or `right` depending on which way up.
+
+Rotation is applied whether breeze starts its own X server or attaches
+to one that is already running.
 
 ## Dependencies
 
@@ -69,7 +137,7 @@ Press Escape to exit.
 |----------------|----------------------------|----------------------|
 | GTK 3          | `libgtk-3-dev`             | GUI framework        |
 | WebKitGTK 4.1  | `libwebkit2gtk-4.1-dev`    | Embedded web view    |
-| libsoup 3.0   | `libsoup-3.0-dev`          | HTTP client          |
+| libsoup 3.0    | `libsoup-3.0-dev`          | HTTP client          |
 | cJSON          | `libcjson-dev`             | JSON parsing         |
 
 ## Vendored Code

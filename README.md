@@ -13,7 +13,8 @@ and tracker music.  Built with SDL2 and inspired by 1990s Amiga/PC demos.
 
 A GTK-based weather and time display with animated backgrounds.  Touch
 anywhere to temporarily show a configurable web page (e.g., a dashboard),
-then automatically return to the weather view.
+then automatically return to the weather view.  Or let it cycle between
+the two on a carousel.
 
 ## Quick Start
 
