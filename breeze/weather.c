@@ -280,9 +280,11 @@ WeatherData weather_fetch(double latitude, double longitude)
         sun_rise_set(year, month, day, longitude, latitude, &rise, &set);
 
         /* sun_rise_set returns UTC hours; convert to local */
-        struct tm local_ref = *localtime(&t);
-        struct tm utc_ref = *gmtime(&t);
-        double tz_offset = difftime(mktime(&local_ref), mktime(&utc_ref)) / 3600.0;
+        struct tm local;
+        double tz_offset;
+
+        localtime_r(&t, &local);
+        tz_offset = local.tm_gmtoff / 3600.0;
 
         data.sunrise = fmod(rise + tz_offset + 24.0, 24.0);
         data.sunset = fmod(set + tz_offset + 24.0, 24.0);
