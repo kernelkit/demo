@@ -77,7 +77,20 @@ static AppContext app;
 /* CSS styling                                                        */
 /* ------------------------------------------------------------------ */
 
-static const char *css_style = "label.overlay-time {"
+/*
+ * Name the family rather than taking whatever "Sans" resolves to.  The
+ * design uses weight 300 and 600, and DejaVu -- which is what a bare
+ * container falls back to -- only has Book and Bold, so both silently
+ * became the wrong weight.  DejaVu stays installed: Open Sans has no
+ * sun, moon, or wind arrows, and Pango falls back to it per glyph.
+ */
+static const char *css_style = "label.overlay-time,"
+                               "label.overlay-temp,"
+                               "label.overlay-desc,"
+                               "label.overlay-detail {"
+                               "  font-family: \"Open Sans\", \"DejaVu Sans\", sans-serif;"
+                               "}"
+                               "label.overlay-time {"
                                "  color: white;"
                                "  font-size: 124px;"
                                "  font-weight: 300;"

@@ -28,6 +28,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libcjson1 \
     ca-certificates \
     fonts-dejavu-core \
+    fonts-open-sans \
     xorg \
     xinit \
     xserver-xorg-input-libinput \
