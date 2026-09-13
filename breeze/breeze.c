@@ -559,6 +559,15 @@ static void usage(const char *name)
            "Press Escape to exit.\n", name);
 }
 
+/* Compose substitutes an empty string for variables unset in its own
+ * environment, so an empty value must read as "not set". */
+static const char *env_str(const char *name)
+{
+    const char *val = getenv(name);
+
+    return (val && val[0]) ? val : NULL;
+}
+
 static gboolean env_bool(const char *name)
 {
     const char *val = getenv(name);
@@ -583,21 +592,20 @@ static void parse_args(int argc, char *argv[])
 {
     /* Defaults from environment, then fallback */
     const char *env;
-    const char *location = NULL;
+    const char *location;
     gboolean    carousel_set = FALSE;
 
-    env = getenv("LATITUDE");
+    env = env_str("LATITUDE");
     app.latitude = env ? atof(env) : 59.3293;       /* Stockholm */
 
-    env = getenv("LONGITUDE");
+    env = env_str("LONGITUDE");
     app.longitude = env ? atof(env) : 18.0686;
 
-    env = getenv("LOCATION");
-    if (env) location = env;
+    location = env_str("LOCATION");
 
     /* Parse WEB_URL: comma-separated list */
-    env = getenv("WEB_URL");
-    if (env && env[0]) {
+    env = env_str("WEB_URL");
+    if (env) {
         char *copy = strdup(env);
         char *token = strtok(copy, ",");
         while (token) {
@@ -611,10 +619,10 @@ static void parse_args(int argc, char *argv[])
     }
 
     /* Carousel env vars */
-    env = getenv("CAROUSEL_WEATHER");
+    env = env_str("CAROUSEL_WEATHER");
     if (env) { app.carousel_weather = atoi(env); carousel_set = TRUE; }
 
-    env = getenv("CAROUSEL_URL");
+    env = env_str("CAROUSEL_URL");
     if (env) { app.carousel_url = atoi(env); carousel_set = TRUE; }
 
     app.fullscreen = env_bool("FULLSCREEN");
