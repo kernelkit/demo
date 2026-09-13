@@ -10,11 +10,22 @@
 #define ANIM_MAX_STREAKS   15
 #define ANIM_MAX_STARS     160
 
+#define ANIM_CLOUD_PUFFS   7
+#define ANIM_CLOUD_LAYERS  3
+
+typedef struct {
+    double dx, dy;         /* offset from the cloud's anchor, in size units */
+    double r;              /* radius, in size units */
+} Puff;
+
 typedef struct {
     double x, y;
     double speed;
     double size;
     double opacity;
+    int    layer;          /* 0 farthest, ANIM_CLOUD_LAYERS-1 nearest */
+    Puff   puffs[ANIM_CLOUD_PUFFS];
+    int    puff_count;
 } Cloud;
 
 typedef struct {

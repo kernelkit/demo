@@ -138,6 +138,49 @@ static void update_sky(AnimState *state)
 }
 
 /* ------------------------------------------------------------------ */
+/* Clouds                                                             */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Depth comes from three layers: the far ones are small, slow, and pale,
+ * the near ones big and quick.  Each cloud is a handful of overlapping
+ * puffs with its own silhouette, reshuffled whenever it wraps around, so
+ * the same twenty clouds never quite repeat.
+ */
+static const struct {
+    double size, speed, opacity, top, band;
+} cloud_layers[ANIM_CLOUD_LAYERS] = {
+    { 0.55, 0.45, 0.55, 0.02, 0.22 },
+    { 1.00, 1.00, 0.80, 0.06, 0.30 },
+    { 1.55, 1.75, 1.00, 0.10, 0.38 },
+};
+
+static void cloud_init(AnimState *state, Cloud *c, int layer, bool offscreen)
+{
+    const typeof(cloud_layers[0]) *l = &cloud_layers[layer];
+
+    c->layer   = layer;
+    c->size    = (34.0 + randf() * 46.0) * l->size;
+    c->speed   = (7.0 + randf() * 16.0) * l->speed;
+    c->opacity = (0.55 + randf() * 0.45) * l->opacity;
+    c->y       = state->height * (l->top + randf() * l->band);
+    c->x       = offscreen ? -c->size * 2.2 : randf() * state->width;
+
+    c->puff_count = 5 + (rand() % (ANIM_CLOUD_PUFFS - 4));
+    for (int i = 0; i < c->puff_count; i++) {
+	Puff *p = &c->puffs[i];
+	double t = (double)i / (c->puff_count - 1);
+
+	/* Fattest in the middle, and sitting on a common base so the
+	 * cloud gets a flat bottom and a domed top */
+	p->dx = (t - 0.5) * 1.6;
+	p->r  = (0.34 + 0.26 * (1.0 - fabs(t - 0.5) * 2.0)) *
+		(0.85 + randf() * 0.30);
+	p->dy = 0.55 - p->r + (randf() - 0.5) * 0.07;
+    }
+}
+
+/* ------------------------------------------------------------------ */
 /* Initialisation                                                     */
 /* ------------------------------------------------------------------ */
 
@@ -163,15 +206,8 @@ void anim_init(AnimState *state, int width, int height)
     }
 
     /* Pre-place a few clouds */
-    for (int i = 0; i < ANIM_MAX_CLOUDS; i++) {
-        Cloud *c = &state->clouds[i];
-
-        c->x       = randf() * width;
-        c->y       = randf() * height * 0.35;
-        c->speed   = 8.0 + randf() * 20.0;
-        c->size    = 40.0 + randf() * 60.0;
-        c->opacity = 0.25 + randf() * 0.35;
-    }
+    for (int i = 0; i < ANIM_MAX_CLOUDS; i++)
+	cloud_init(state, &state->clouds[i], i % ANIM_CLOUD_LAYERS, false);
 }
 
 /* ------------------------------------------------------------------ */
@@ -180,22 +216,21 @@ void anim_init(AnimState *state, int width, int height)
 
 static void update_clouds(AnimState *state, double dt)
 {
-    /* Target cloud count proportional to cloud cover */
-    int target = (int)(state->weather.cloudcover / 100.0 * ANIM_MAX_CLOUDS);
+    double cover = state->weather.cloudcover / 100.0;
+    int target;
 
-    if (target < 2)
-        target = 2;
+    /* A clear sky means a clear sky, not two blobs drifting through it */
+    target = cover < 0.08 ? 0 : (int)(cover * ANIM_MAX_CLOUDS + 0.5);
+    if (target > ANIM_MAX_CLOUDS)
+	target = ANIM_MAX_CLOUDS;
     state->cloud_count = target;
 
     for (int i = 0; i < state->cloud_count; i++) {
-        Cloud *c = &state->clouds[i];
+	Cloud *c = &state->clouds[i];
 
-        c->x += c->speed * dt;
-        if (c->x - c->size > state->width) {
-            c->x = -c->size * 2;
-            c->y = randf() * state->height * 0.35;
-            c->speed = 8.0 + randf() * 20.0;
-        }
+	c->x += c->speed * dt;
+	if (c->x - c->size * 1.2 > state->width)
+	    cloud_init(state, c, c->layer, true);
     }
 }
 
@@ -449,27 +484,184 @@ static void draw_sun(const AnimState *state, cairo_t *cr)
     cairo_pattern_destroy(grad);
 }
 
+/*
+ * Soft radial puffs rather than flat discs: each fades to nothing at its
+ * rim, so the overlaps stop showing as seams.  The gradient is offset
+ * towards whatever is lighting the sky, which puts the shadow on the far
+ * side and gives the warm undersides you get at either end of the day.
+ */
 static void draw_clouds(const AnimState *state, cairo_t *cr)
 {
-    double darkness = state->weather.cloudcover / 100.0;
+    double cover = state->weather.cloudcover / 100.0;
+    double day = clampf(state->sun_alt * 4.0 + 0.35, 0.0, 1.0);
+    double warm = clampf(1.0 - fabs(state->sun_alt) * 5.0, 0.0, 1.0);
+    double lx, ly, len;
 
-    for (int i = 0; i < state->cloud_count; i++) {
-        const Cloud *c = &state->clouds[i];
-        double gray = lerp(0.95, 0.55, darkness);
-        double alpha = c->opacity * (0.3 + darkness * 0.5);
+    if (state->cloud_count == 0)
+	return;
 
-        cairo_set_source_rgba(cr, gray, gray, gray, alpha);
-
-        /* Draw cloud as overlapping circles */
-        cairo_arc(cr, c->x, c->y, c->size * 0.6, 0, 2.0 * M_PI);
-        cairo_fill(cr);
-        cairo_arc(cr, c->x + c->size * 0.4, c->y - c->size * 0.15, c->size * 0.5, 0, 2.0 * M_PI);
-        cairo_fill(cr);
-        cairo_arc(cr, c->x - c->size * 0.35, c->y + c->size * 0.1, c->size * 0.45, 0, 2.0 * M_PI);
-        cairo_fill(cr);
-        cairo_arc(cr, c->x + c->size * 0.2, c->y + c->size * 0.2, c->size * 0.5, 0, 2.0 * M_PI);
-        cairo_fill(cr);
+    /* Direction of the light, for the shading offset */
+    if (state->sun_alpha > state->moon_alpha) {
+	lx = state->sun_x;
+	ly = state->sun_y;
+    } else {
+	lx = state->moon_x;
+	ly = state->moon_y;
     }
+
+    for (int layer = 0; layer < ANIM_CLOUD_LAYERS; layer++) {
+	for (int i = 0; i < state->cloud_count; i++) {
+	    const Cloud *c = &state->clouds[i];
+
+	    if (c->layer != layer)
+		continue;
+
+	    /* Lit side, shaded side, both dulled by how thick the deck is */
+	    double lit[3] = {
+		lerp(0.20, 1.00, day),
+		lerp(0.22, 1.00, day),
+		lerp(0.30, 1.00, day),
+	    };
+	    double shade[3] = {
+		lerp(0.12, 0.62, day),
+		lerp(0.13, 0.64, day),
+		lerp(0.20, 0.72, day),
+	    };
+
+	    for (int k = 0; k < 3; k++) {
+		double grey = lerp(1.0, 0.62, cover);
+
+		lit[k] *= grey;
+		shade[k] *= grey;
+	    }
+
+	    /* Golden hour warms the lit side and reddens the shadow */
+	    lit[0] = lerp(lit[0], lit[0] * 1.08 + 0.10, warm);
+	    lit[1] = lerp(lit[1], lit[1] * 0.92 + 0.02, warm);
+	    lit[2] = lerp(lit[2], lit[2] * 0.74, warm);
+	    shade[0] = lerp(shade[0], shade[0] * 1.15 + 0.10, warm);
+	    shade[2] = lerp(shade[2], shade[2] * 0.90, warm);
+
+	    /* Haze first, so the rim dissolves instead of ending */
+	    for (int j = 0; j < c->puff_count; j++) {
+		const Puff *pf = &c->puffs[j];
+		double px = c->x + pf->dx * c->size;
+		double py = c->y + pf->dy * c->size;
+		double pr = pf->r * c->size * 1.38;
+		double mid[3];
+		cairo_pattern_t *g;
+
+		for (int k = 0; k < 3; k++)
+		    mid[k] = (lit[k] + shade[k]) / 2.0;
+
+		g = cairo_pattern_create_radial(px, py, pr * 0.30, px, py, pr);
+		cairo_pattern_add_color_stop_rgba(g, 0.0, mid[0], mid[1],
+						  mid[2], c->opacity * 0.62);
+		cairo_pattern_add_color_stop_rgba(g, 0.55, mid[0], mid[1],
+						  mid[2], c->opacity * 0.38);
+		cairo_pattern_add_color_stop_rgba(g, 1.0, mid[0], mid[1],
+						  mid[2], 0.0);
+		cairo_set_source(cr, g);
+		cairo_arc(cr, px, py, pr, 0, 2.0 * M_PI);
+		cairo_fill(cr);
+		cairo_pattern_destroy(g);
+	    }
+
+	    /* Then the body as one path, so the puffs stop reading as
+	     * separate balls, lit from above across the whole cloud */
+	    {
+		double dirx = 0.0, diry = -1.0, ext;
+		cairo_pattern_t *g;
+
+		cairo_new_path(cr);
+		for (int j = 0; j < c->puff_count; j++) {
+		    const Puff *pf = &c->puffs[j];
+		    double px = c->x + pf->dx * c->size;
+		    double py = c->y + pf->dy * c->size;
+		    double pr = pf->r * c->size * 0.82;
+
+		    cairo_new_sub_path(cr);
+		    cairo_arc(cr, px, py, pr, 0, 2.0 * M_PI);
+		}
+
+		/* Shade along the axis to the light, not merely downwards,
+		 * so a low sun lights the clouds from the side */
+		len = hypot(lx - c->x, ly - c->y);
+		if (len > 1.0) {
+		    dirx = (lx - c->x) / len;
+		    diry = (ly - c->y) / len;
+		}
+		ext = c->size * 0.95;
+
+		g = cairo_pattern_create_linear(c->x + dirx * ext,
+						c->y + diry * ext,
+						c->x - dirx * ext,
+						c->y - diry * ext);
+		cairo_pattern_add_color_stop_rgba(g, 0.0, lit[0], lit[1],
+						  lit[2], c->opacity);
+		cairo_pattern_add_color_stop_rgba(g, 0.55, lerp(lit[0], shade[0], 0.55),
+						  lerp(lit[1], shade[1], 0.55),
+						  lerp(lit[2], shade[2], 0.55),
+						  c->opacity);
+		cairo_pattern_add_color_stop_rgba(g, 1.0, shade[0], shade[1],
+						  shade[2], c->opacity * 0.94);
+		cairo_set_source(cr, g);
+		cairo_fill(cr);
+		cairo_pattern_destroy(g);
+	    }
+	}
+    }
+}
+
+/* Two ridges of hills, so the sky has somewhere to land */
+static void hill_path(const AnimState *state, cairo_t *cr, double base,
+		      double amp, double freq, double phase)
+{
+    cairo_new_path(cr);
+    cairo_move_to(cr, 0, state->height);
+
+    for (double x = 0; x <= state->width; x += 6.0) {
+	double y = base - amp * (0.62 * sin(x * freq + phase) +
+				 0.38 * sin(x * freq * 2.7 + phase * 1.9));
+	cairo_line_to(cr, x, y);
+    }
+
+    cairo_line_to(cr, state->width, state->height);
+    cairo_close_path(cr);
+}
+
+static void draw_horizon(const AnimState *state, cairo_t *cr)
+{
+    double bot[3];
+
+    sky_stop(state, 2, bot);
+
+    /* Far ridge, hazy: the sky's own colour, knocked well down */
+    hill_path(state, cr, state->horizon, state->height * 0.045,
+	      3.4 / state->width * M_PI, 0.8);
+    cairo_set_source_rgb(cr, bot[0] * 0.42, bot[1] * 0.40, bot[2] * 0.46);
+    cairo_fill(cr);
+
+    /* Near ridge, near enough black */
+    hill_path(state, cr, state->horizon + state->height * 0.055,
+	      state->height * 0.038, 2.1 / state->width * M_PI, 2.6);
+    cairo_set_source_rgb(cr, bot[0] * 0.16, bot[1] * 0.15, bot[2] * 0.20);
+    cairo_fill(cr);
+}
+
+static void draw_vignette(const AnimState *state, cairo_t *cr)
+{
+    double cx = state->width / 2.0;
+    double cy = state->height / 2.0;
+    double r = hypot(cx, cy);
+    cairo_pattern_t *g;
+
+    g = cairo_pattern_create_radial(cx, cy, r * 0.45, cx, cy, r);
+    cairo_pattern_add_color_stop_rgba(g, 0.0, 0, 0, 0, 0.0);
+    cairo_pattern_add_color_stop_rgba(g, 1.0, 0, 0, 0, 0.30);
+    cairo_set_source(cr, g);
+    cairo_paint(cr);
+    cairo_pattern_destroy(g);
 }
 
 static void draw_rain(const AnimState *state, cairo_t *cr)
@@ -532,6 +724,7 @@ void anim_draw(const AnimState *state, cairo_t *cr)
     draw_moon(state, cr);
     draw_sun(state, cr);
     draw_clouds(state, cr);
+    draw_horizon(state, cr);
     draw_streaks(state, cr);
 
     bool rain = (state->weather.type == WEATHER_RAIN ||
@@ -544,4 +737,6 @@ void anim_draw(const AnimState *state, cairo_t *cr)
         draw_rain(state, cr);
     else if (snow)
         draw_snow(state, cr);
+
+    draw_vignette(state, cr);
 }
