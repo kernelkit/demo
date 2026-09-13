@@ -28,6 +28,11 @@ typedef struct {
     int    layer;          /* 0 farthest, ANIM_CLOUD_LAYERS-1 nearest */
     Puff   puffs[ANIM_CLOUD_PUFFS];
     int    puff_count;
+
+    /* Drawn once into a sprite, then blitted while it drifts */
+    cairo_surface_t *sprite;
+    int    sprite_key;
+    double sprite_hw, sprite_hh;
 } Cloud;
 
 typedef struct {
@@ -98,6 +103,14 @@ typedef struct {
     int width;
     int height;
 
+    /* Cached layers: the sky and the hills only change as the light
+     * does, the vignette never.  light_key says when to redraw them. */
+    cairo_surface_t *sky_layer;
+    cairo_surface_t *hill_layer;
+    cairo_surface_t *vignette_layer;
+    int    layer_key;
+    int    layer_w, layer_h;
+
     /* Current weather state driving the animation */
     WeatherData weather;
     double      time_accum;
@@ -110,6 +123,6 @@ void anim_init(AnimState *state, int width, int height);
 void anim_update(AnimState *state, double dt, const WeatherData *weather);
 
 /* Draw all animation layers to the Cairo context */
-void anim_draw(const AnimState *state, cairo_t *cr);
+void anim_draw(AnimState *state, cairo_t *cr);
 
 #endif /* ANIMATIONS_H */
