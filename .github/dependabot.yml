@@ -1,0 +1,20 @@
+version: 2
+updates:
+  # The actions drift out of support quietly -- a deprecated Node
+  # runtime only shows up as a warning on a run nobody reads.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: demo
+
+  # classic builds on alpine, breeze on debian:bookworm-slim
+  - package-ecosystem: docker
+    directories:
+      - /classic
+      - /breeze
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: demo
