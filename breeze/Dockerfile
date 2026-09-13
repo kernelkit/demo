@@ -41,5 +41,6 @@ COPY xorg.conf /etc/X11/xorg.conf
 COPY start.sh /app/start.sh
 
 ENV DISPLAY=:0
+ENV FULLSCREEN=1
 
-CMD ["/app/start.sh", "-f"]
+CMD ["/app/start.sh"]

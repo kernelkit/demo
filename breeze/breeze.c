@@ -503,6 +503,7 @@ static void usage(const char *name)
            "\n"
            "Environment variables, used as fallbacks when options are not given:\n"
            "\n"
+           "  FULLSCREEN                    Fullscreen mode: 1, true, yes, or on\n"
            "  LOCATION                      Same as --location\n"
            "  LATITUDE, LONGITUDE           Same as --lat and --lon\n"
            "  WEB_URL                       Comma-separated list of URLs\n"
@@ -514,6 +515,19 @@ static void usage(const char *name)
            "manually toggles between views (cycling through URLs round-robin).\n"
            "\n"
            "Press Escape to exit.\n", name);
+}
+
+static gboolean env_bool(const char *name)
+{
+    const char *val = getenv(name);
+
+    if (!val || !val[0])
+        return FALSE;
+
+    return g_ascii_strcasecmp(val, "0") != 0 &&
+           g_ascii_strcasecmp(val, "false") != 0 &&
+           g_ascii_strcasecmp(val, "no") != 0 &&
+           g_ascii_strcasecmp(val, "off") != 0;
 }
 
 static void add_url(const char *url)
@@ -560,6 +574,8 @@ static void parse_args(int argc, char *argv[])
 
     env = getenv("CAROUSEL_URL");
     if (env) { app.carousel_url = atoi(env); carousel_set = TRUE; }
+
+    app.fullscreen = env_bool("FULLSCREEN");
 
     static const struct option long_opts[] = {
         { "carousel-url",     required_argument, NULL, 'c' },
