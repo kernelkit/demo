@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   classic:
     image: ghcr.io/kernelkit/demo:latest
@@ -22,12 +20,18 @@ services:
       context: ./breeze
     environment:
       - DISPLAY=${DISPLAY}
+      - DISPLAY_ROTATE=${DISPLAY_ROTATE:-}
+      - FULLSCREEN=${FULLSCREEN:-1}
       - LATITUDE=${LATITUDE}
       - LONGITUDE=${LONGITUDE}
       - LOCATION=${LOCATION}
       - WEB_URL=${WEB_URL}
+      - CAROUSEL_WEATHER=${CAROUSEL_WEATHER:-}
+      - CAROUSEL_URL=${CAROUSEL_URL:-}
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix
+      # Without this the container runs in UTC and shows the wrong time
+      - /etc/localtime:/etc/localtime:ro
     network_mode: host
     stdin_open: true
     tty: true
