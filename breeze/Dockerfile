@@ -27,6 +27,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsoup-3.0-0 \
     libcjson1 \
     ca-certificates \
+    fonts-dejavu-core \
     xorg \
     xinit \
     xserver-xorg-input-libinput \

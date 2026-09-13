@@ -32,8 +32,7 @@ typedef struct {
     GtkWidget *time_label;
     GtkWidget *temp_label;
     GtkWidget *desc_label;
-    GtkWidget *wind_label;
-    GtkWidget *sun_label;
+    GtkWidget *detail_label;
     GtkWidget *web_view;
     GtkWidget *overlay_vbox;
     GtkWidget *loading_label;
@@ -79,23 +78,32 @@ static AppContext app;
 /* ------------------------------------------------------------------ */
 
 static const char *css_style =
-    "label.overlay-text {"
-    "  color: white;"
-    "  font-size: 48px;"
-    "  font-weight: bold;"
-    "  text-shadow: 2px 2px 6px rgba(0,0,0,0.7);"
-    "}"
     "label.overlay-time {"
     "  color: white;"
-    "  font-size: 96px;"
-    "  font-weight: bold;"
-    "  text-shadow: 3px 3px 8px rgba(0,0,0,0.7);"
+    "  font-size: 124px;"
+    "  font-weight: 300;"
+    "  letter-spacing: -3px;"
+    "  text-shadow: 0 3px 12px rgba(0,0,0,0.55);"
     "}"
-    "label.overlay-small {"
+    "label.overlay-temp {"
     "  color: white;"
-    "  font-size: 28px;"
+    "  font-size: 58px;"
+    "  font-weight: 600;"
+    "  text-shadow: 0 2px 8px rgba(0,0,0,0.55);"
+    "}"
+    "label.overlay-desc {"
+    "  color: rgba(255,255,255,0.88);"
+    "  font-size: 32px;"
+    "  font-weight: 300;"
+    "  letter-spacing: 1px;"
+    "  text-shadow: 0 2px 8px rgba(0,0,0,0.55);"
+    "}"
+    "label.overlay-detail {"
+    "  color: rgba(255,255,255,0.72);"
+    "  font-size: 22px;"
     "  font-weight: normal;"
-    "  text-shadow: 1px 1px 4px rgba(0,0,0,0.7);"
+    "  letter-spacing: 1px;"
+    "  text-shadow: 0 1px 5px rgba(0,0,0,0.6);"
     "}"
     "label.overlay-notify {"
     "  color: #333;"
@@ -168,35 +176,38 @@ static void apply_demo_weather(void)
 static void update_weather_labels(void)
 {
     if (!app.weather.valid) {
-        gtk_label_set_text(GTK_LABEL(app.temp_label), "--\u00B0C");
+        gtk_label_set_text(GTK_LABEL(app.temp_label), "--\u00B0");
         gtk_label_set_text(GTK_LABEL(app.desc_label), "No data");
-        gtk_label_set_text(GTK_LABEL(app.wind_label), "");
-        gtk_label_set_text(GTK_LABEL(app.sun_label), "");
+        gtk_label_set_text(GTK_LABEL(app.detail_label), "");
         return;
     }
 
-    char temp_buf[64];
-    snprintf(temp_buf, sizeof(temp_buf), "%.0f\u00B0C   RH %d%%",
-             app.weather.temperature, app.weather.humidity);
+    char temp_buf[32];
+    snprintf(temp_buf, sizeof(temp_buf), "%.0f\u00B0",
+             app.weather.temperature);
     gtk_label_set_text(GTK_LABEL(app.temp_label), temp_buf);
 
     gtk_label_set_text(GTK_LABEL(app.desc_label),
                        weather_description(app.weather.type));
 
-    /* Wind: API gives km/h, display in m/s with direction arrow and compass */
+    /* Everything secondary on one quiet line below the headline.
+     * Wind: API gives km/h, shown in m/s with an arrow and a compass
+     * point. */
+    char rise[8], set[8], detail[160];
     double wind_ms = app.weather.windspeed / 3.6;
-    char wind_buf[64];
-    snprintf(wind_buf, sizeof(wind_buf), "%s %.0f m/s %s",
-             weather_wind_arrow(app.weather.winddirection),
-             wind_ms,
-             weather_wind_compass(app.weather.winddirection));
-    gtk_label_set_text(GTK_LABEL(app.wind_label), wind_buf);
 
-    char rise[8], set[8], sun_buf[64];
     weather_format_time(app.weather.sunrise, rise, sizeof(rise));
     weather_format_time(app.weather.sunset, set, sizeof(set));
-    snprintf(sun_buf, sizeof(sun_buf), "\u2600 %s   \u263D %s", rise, set);
-    gtk_label_set_text(GTK_LABEL(app.sun_label), sun_buf);
+
+    snprintf(detail, sizeof(detail),
+             "RH %d%%   \u00B7   %s %.0f m/s %s   \u00B7   "
+             "\u2600 %s   \u00B7   \u263D %s",
+             app.weather.humidity,
+             weather_wind_arrow(app.weather.winddirection),
+             wind_ms,
+             weather_wind_compass(app.weather.winddirection),
+             rise, set);
+    gtk_label_set_text(GTK_LABEL(app.detail_label), detail);
 }
 
 /* ------------------------------------------------------------------ */
@@ -486,43 +497,43 @@ static GtkWidget *create_weather_view(void)
     g_signal_connect(app.drawing_area, "size-allocate",
                      G_CALLBACK(on_drawing_area_size_allocate), NULL);
 
-    /* Overlay labels */
+    /* Overlay labels, in three tiers: the clock, then the conditions,
+     * then everything secondary on one quiet line */
     app.time_label = gtk_label_new("--:--");
     gtk_widget_set_halign(app.time_label, GTK_ALIGN_CENTER);
-    gtk_widget_set_valign(app.time_label, GTK_ALIGN_CENTER);
     gtk_style_context_add_class(gtk_widget_get_style_context(app.time_label),
                                 "overlay-time");
 
-    app.temp_label = gtk_label_new("--\u00B0C");
-    gtk_widget_set_halign(app.temp_label, GTK_ALIGN_CENTER);
+    app.temp_label = gtk_label_new("--\u00B0");
     gtk_style_context_add_class(gtk_widget_get_style_context(app.temp_label),
-                                "overlay-text");
+                                "overlay-temp");
 
     app.desc_label = gtk_label_new("");
-    gtk_widget_set_halign(app.desc_label, GTK_ALIGN_CENTER);
     gtk_style_context_add_class(gtk_widget_get_style_context(app.desc_label),
-                                "overlay-text");
+                                "overlay-desc");
 
-    app.wind_label = gtk_label_new("");
-    gtk_widget_set_halign(app.wind_label, GTK_ALIGN_CENTER);
-    gtk_style_context_add_class(gtk_widget_get_style_context(app.wind_label),
-                                "overlay-small");
+    app.detail_label = gtk_label_new("");
+    gtk_widget_set_halign(app.detail_label, GTK_ALIGN_CENTER);
+    gtk_style_context_add_class(gtk_widget_get_style_context(app.detail_label),
+                                "overlay-detail");
 
-    app.sun_label = gtk_label_new("");
-    gtk_widget_set_halign(app.sun_label, GTK_ALIGN_CENTER);
-    gtk_style_context_add_class(gtk_widget_get_style_context(app.sun_label),
-                                "overlay-small");
+    /* Temperature and conditions share a line, baselines aligned */
+    GtkWidget *conditions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 18);
+    gtk_widget_set_halign(conditions, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(app.temp_label, GTK_ALIGN_BASELINE);
+    gtk_widget_set_valign(app.desc_label, GTK_ALIGN_BASELINE);
+    gtk_box_set_baseline_position(GTK_BOX(conditions), GTK_BASELINE_POSITION_BOTTOM);
+    gtk_box_pack_start(GTK_BOX(conditions), app.temp_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(conditions), app.desc_label, FALSE, FALSE, 0);
 
     /* Vertical box for text overlays */
-    GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_widget_set_halign(vbox, GTK_ALIGN_CENTER);
     gtk_widget_set_valign(vbox, GTK_ALIGN_CENTER);
     app.overlay_vbox = vbox;
     gtk_box_pack_start(GTK_BOX(vbox), app.time_label, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(vbox), app.temp_label, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(vbox), app.desc_label, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(vbox), app.wind_label, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(vbox), app.sun_label, FALSE, FALSE, 10);
+    gtk_box_pack_start(GTK_BOX(vbox), conditions, FALSE, FALSE, 6);
+    gtk_box_pack_start(GTK_BOX(vbox), app.detail_label, FALSE, FALSE, 22);
 
     /* Loading notification -- centered overlay, shown while web page loads */
     app.loading_label = gtk_label_new("Loading \u2026");
