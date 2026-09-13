@@ -7,6 +7,9 @@ LDLIBS     = $(gtk_LIBS) -lm
 TARGET     = breeze
 SOURCES    = breeze.c weather.c animations.c sunriset.c
 
+# sunriset.[ch] is vendored, it stays in its upstream formatting
+FMT_FILES  = breeze.c weather.c animations.c weather.h animations.h
+
 all: $(TARGET)
 
 $(TARGET): $(SOURCES) weather.h animations.h sunriset.h
@@ -14,6 +17,9 @@ $(TARGET): $(SOURCES) weather.h animations.h sunriset.h
 
 run: $(TARGET)
 	./$(TARGET)
+
+fmt:
+	clang-format -i $(FMT_FILES)
 
 clean:
 	rm -f $(TARGET)
@@ -28,4 +34,4 @@ docker-run: docker-build
 		-v /tmp/.X11-unix:/tmp/.X11-unix \
 		breeze
 
-.PHONY: all clean run docker-build docker-run
+.PHONY: all clean fmt run docker-build docker-run

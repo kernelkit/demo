@@ -1,0 +1,43 @@
+# kernelkit C style: Linux kernel, tabs at eight columns.
+#
+# We are not religious about line length.  The limit is deliberately
+# generous, so a line of 100 or 110 characters is left alone rather than
+# chopped into continuations that read worse than the original.
+---
+Language:        Cpp
+BasedOnStyle:    LLVM
+
+IndentWidth:     8
+TabWidth:        8
+UseTab:          ForIndentation
+ContinuationIndentWidth: 8
+ColumnLimit:     110
+
+BreakBeforeBraces: Linux
+PointerAlignment: Right
+AlignAfterOpenBracket: Align
+AlignArrayOfStructures: Left
+IndentCaseLabels: false
+IndentGotoLabels: false
+Cpp11BracedListStyle: false
+SortIncludes:    false
+SpaceAfterCStyleCast: false
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 1
+
+# Break after the operator, not before it, which is how the code reads
+# now and keeps ternary chains from marching off to the right margin
+BreakBeforeTernaryOperators: false
+BreakBeforeBinaryOperators: None
+
+# Kernel style puts the body of a one-line if or loop on its own line.
+# The exception is a table of case labels, which reads far better as a
+# column than as three lines per entry.
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Empty
+AllowShortFunctionsOnASingleLine: None
+
+# Never chop a string literal in half to make it fit
+BreakStringLiterals: false
