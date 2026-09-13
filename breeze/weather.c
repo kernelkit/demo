@@ -233,10 +233,15 @@ WeatherData weather_fetch(double latitude, double longitude)
         data.valid = true;
     }
 
-    /* Extract current hour's cloudcover and precipitation from hourly arrays */
+    /* Extract current hour's cloudcover and precipitation from hourly
+     * arrays.  We do not ask for a timezone, so the API returns GMT and
+     * hourly[0] is 00:00 UTC -- index by UTC hour, not local. */
     time_t now = time(NULL);
-    struct tm *tm_now = localtime(&now);
-    int current_hour = tm_now->tm_hour;
+    struct tm tm_utc;
+    int current_hour;
+
+    gmtime_r(&now, &tm_utc);
+    current_hour = tm_utc.tm_hour;
 
     cJSON *hourly = cJSON_GetObjectItem(root, "hourly");
     if (hourly) {
