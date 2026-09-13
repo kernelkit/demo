@@ -52,6 +52,10 @@ typedef struct {
     int         url_count;
     int         current_url;
 
+    /* Forced weather for demos, -1 when off */
+    int         demo_weather;
+    int         demo_cover;
+
     /* Carousel */
     int         carousel_weather;   /* Seconds to show weather (0 = disabled) */
     int         carousel_url;       /* Seconds to show each URL (0 = disabled) */
@@ -127,6 +131,38 @@ static void update_clock_label(void)
 
     snprintf(buf, sizeof(buf), "%02d:%02d", tm->tm_hour, tm->tm_min);
     gtk_label_set_text(GTK_LABEL(app.time_label), buf);
+}
+
+/*
+ * Trade shows rarely lay on a thunderstorm to order, so --weather paints
+ * one anyway.  Cloud cover comes along with the type, since the two
+ * disagreeing looks worse than either.
+ */
+static const struct {
+    const char *name;
+    WeatherType type;
+    int         cover;
+} demo_types[] = {
+    { "clear",     WEATHER_CLEAR,         0 },
+    { "partly",    WEATHER_PARTLY,       45 },
+    { "overcast",  WEATHER_OVERCAST,     95 },
+    { "fog",       WEATHER_FOG,          98 },
+    { "drizzle",   WEATHER_DRIZZLE,      80 },
+    { "rain",      WEATHER_RAIN,         90 },
+    { "snow",      WEATHER_SNOW,         90 },
+    { "showers",   WEATHER_SHOWERS,      75 },
+    { "thunder",   WEATHER_THUNDERSTORM, 95 },
+};
+
+static void apply_demo_weather(void)
+{
+    if (app.demo_weather < 0)
+	return;
+
+    app.weather.valid = true;
+    app.weather.type = (WeatherType)app.demo_weather;
+    app.weather.cloudcover = app.demo_cover;
+    app.weather.intensity = 0.8;
 }
 
 static void update_weather_labels(void)
@@ -232,6 +268,7 @@ static gboolean on_weather_tick(gpointer data)
     if (fresh.valid)
         app.weather = fresh;
 
+    apply_demo_weather();
     update_weather_labels();
     return G_SOURCE_CONTINUE;
 }
@@ -541,6 +578,9 @@ static void usage(const char *name)
            "      --url URL                 Web page URL (repeatable for carousel)\n"
            "      --carousel-weather SECS   Weather display time in carousel mode (default: 60)\n"
            "      --carousel-url SECS       URL display time in carousel mode (default: 30)\n"
+           "      --weather TYPE            Force a condition, for demos: clear, partly,\n"
+           "                                overcast, fog, drizzle, rain, snow, showers,\n"
+           "                                thunder\n"
            "  -h, --help                    Show this help message\n"
            "\n"
            "Environment variables, used as fallbacks when options are not given:\n"
@@ -551,6 +591,7 @@ static void usage(const char *name)
            "  WEB_URL                       Comma-separated list of URLs\n"
            "  CAROUSEL_WEATHER              Same as --carousel-weather\n"
            "  CAROUSEL_URL                  Same as --carousel-url\n"
+           "  WEATHER                       Same as --weather\n"
            "\n"
            "Setting any carousel option enables automatic cycling between\n"
            "weather and web views. Without carousel options, touch/click\n"
@@ -579,6 +620,19 @@ static gboolean env_bool(const char *name)
            g_ascii_strcasecmp(val, "false") != 0 &&
            g_ascii_strcasecmp(val, "no") != 0 &&
            g_ascii_strcasecmp(val, "off") != 0;
+}
+
+static int parse_weather(const char *name)
+{
+    for (size_t i = 0; i < sizeof(demo_types) / sizeof(demo_types[0]); i++) {
+	if (g_ascii_strcasecmp(name, demo_types[i].name) == 0) {
+	    app.demo_cover = demo_types[i].cover;
+	    return (int)demo_types[i].type;
+	}
+    }
+
+    fprintf(stderr, "Unknown weather type \"%s\"\n", name);
+    exit(1);
 }
 
 static void add_url(const char *url)
@@ -627,6 +681,11 @@ static void parse_args(int argc, char *argv[])
 
     app.fullscreen = env_bool("FULLSCREEN");
 
+    app.demo_weather = -1;
+    env = env_str("WEATHER");
+    if (env)
+	app.demo_weather = parse_weather(env);
+
     static const struct option long_opts[] = {
         { "carousel-url",     required_argument, NULL, 'c' },
         { "carousel-weather", required_argument, NULL, 'C' },
@@ -636,6 +695,7 @@ static void parse_args(int argc, char *argv[])
         { "location",         required_argument, NULL, 'l' },
         { "lon",              required_argument, NULL, 'o' },
         { "url",              required_argument, NULL, 'u' },
+        { "weather",          required_argument, NULL, 'w' },
         { NULL, 0, NULL, 0 }
     };
     int c;
@@ -667,6 +727,9 @@ static void parse_args(int argc, char *argv[])
             break;
         case 'u':
             add_url(optarg);
+            break;
+        case 'w':
+            app.demo_weather = parse_weather(optarg);
             break;
         default:
             usage(argv[0]);
@@ -763,6 +826,7 @@ int main(int argc, char *argv[])
 
     /* Initial weather fetch */
     app.weather = weather_fetch(app.latitude, app.longitude);
+    apply_demo_weather();
     update_weather_labels();
     update_clock_label();
 
