@@ -7,6 +7,7 @@
  * GTK3 + WebKitGTK + Cairo + libsoup3 + cJSON
  */
 
+#include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -493,17 +494,20 @@ static void usage(const char *name)
            "  -f, --fullscreen              Run in fullscreen mode\n"
            "  -l, --location LOCATION       City or Country,City (e.g., \"Stockholm\"\n"
            "                                or \"Sweden,Stockholm\"), geocoded via Open-Meteo\n"
-           "  --lat LATITUDE                Latitude for weather (default: 59.3293)\n"
-           "  --lon LONGITUDE               Longitude for weather (default: 18.0686)\n"
-           "  --url URL                     Web page URL (repeatable for carousel)\n"
-           "  --carousel-weather SECS       Weather display time in carousel mode (default: 60)\n"
-           "  --carousel-url SECS           URL display time in carousel mode (default: 30)\n"
+           "      --lat LATITUDE            Latitude for weather (default: 59.3293)\n"
+           "      --lon LONGITUDE           Longitude for weather (default: 18.0686)\n"
+           "      --url URL                 Web page URL (repeatable for carousel)\n"
+           "      --carousel-weather SECS   Weather display time in carousel mode (default: 60)\n"
+           "      --carousel-url SECS       URL display time in carousel mode (default: 30)\n"
            "  -h, --help                    Show this help message\n"
            "\n"
-           "Environment variables LATITUDE, LONGITUDE, LOCATION, and WEB_URL\n"
-           "are used as fallbacks when options are not given.\n"
-           "WEB_URL supports comma-separated URLs for carousel mode.\n"
-           "CAROUSEL_WEATHER and CAROUSEL_URL set carousel intervals.\n"
+           "Environment variables, used as fallbacks when options are not given:\n"
+           "\n"
+           "  LOCATION                      Same as --location\n"
+           "  LATITUDE, LONGITUDE           Same as --lat and --lon\n"
+           "  WEB_URL                       Comma-separated list of URLs\n"
+           "  CAROUSEL_WEATHER              Same as --carousel-weather\n"
+           "  CAROUSEL_URL                  Same as --carousel-url\n"
            "\n"
            "Setting any carousel option enables automatic cycling between\n"
            "weather and web views. Without carousel options, touch/click\n"
@@ -557,31 +561,50 @@ static void parse_args(int argc, char *argv[])
     env = getenv("CAROUSEL_URL");
     if (env) { app.carousel_url = atoi(env); carousel_set = TRUE; }
 
-    app.fullscreen = FALSE;
+    static const struct option long_opts[] = {
+        { "carousel-url",     required_argument, NULL, 'c' },
+        { "carousel-weather", required_argument, NULL, 'C' },
+        { "fullscreen",       no_argument,       NULL, 'f' },
+        { "help",             no_argument,       NULL, 'h' },
+        { "lat",              required_argument, NULL, 'a' },
+        { "location",         required_argument, NULL, 'l' },
+        { "lon",              required_argument, NULL, 'o' },
+        { "url",              required_argument, NULL, 'u' },
+        { NULL, 0, NULL, 0 }
+    };
+    int c;
 
-    for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "-h") == 0 ||
-            strcmp(argv[i], "--help") == 0) {
+    while ((c = getopt_long(argc, argv, "fhl:", long_opts, NULL)) != -1) {
+        switch (c) {
+        case 'a':
+            app.latitude = atof(optarg);
+            break;
+        case 'c':
+            app.carousel_url = atoi(optarg);
+            carousel_set = TRUE;
+            break;
+        case 'C':
+            app.carousel_weather = atoi(optarg);
+            carousel_set = TRUE;
+            break;
+        case 'f':
+            app.fullscreen = TRUE;
+            break;
+        case 'h':
             usage(argv[0]);
             exit(0);
-        } else if ((strcmp(argv[i], "-l") == 0 ||
-                    strcmp(argv[i], "--location") == 0) && i + 1 < argc) {
-            location = argv[++i];
-        } else if ((strcmp(argv[i], "--lat") == 0) && i + 1 < argc) {
-            app.latitude = atof(argv[++i]);
-        } else if ((strcmp(argv[i], "--lon") == 0) && i + 1 < argc) {
-            app.longitude = atof(argv[++i]);
-        } else if ((strcmp(argv[i], "--url") == 0) && i + 1 < argc) {
-            add_url(argv[++i]);
-        } else if ((strcmp(argv[i], "--carousel-weather") == 0) && i + 1 < argc) {
-            app.carousel_weather = atoi(argv[++i]);
-            carousel_set = TRUE;
-        } else if ((strcmp(argv[i], "--carousel-url") == 0) && i + 1 < argc) {
-            app.carousel_url = atoi(argv[++i]);
-            carousel_set = TRUE;
-        } else if (strcmp(argv[i], "--fullscreen") == 0 ||
-                   strcmp(argv[i], "-f") == 0) {
-            app.fullscreen = TRUE;
+        case 'l':
+            location = optarg;
+            break;
+        case 'o':
+            app.longitude = atof(optarg);
+            break;
+        case 'u':
+            add_url(optarg);
+            break;
+        default:
+            usage(argv[0]);
+            exit(1);
         }
     }
 
