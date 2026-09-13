@@ -9,6 +9,8 @@
 #define ANIM_MAX_PARTICLES 300
 #define ANIM_MAX_STREAKS   15
 #define ANIM_MAX_STARS     160
+#define ANIM_MAX_SPLASHES  24
+#define ANIM_BOLT_POINTS   9
 
 #define ANIM_CLOUD_PUFFS   7
 #define ANIM_CLOUD_LAYERS  3
@@ -42,6 +44,11 @@ typedef struct {
 } Star;
 
 typedef struct {
+    double x, y;
+    double age;            /* 0.0 fresh, 1.0 gone */
+} Splash;
+
+typedef struct {
     /* Sky, recomputed every update from the time of day */
     double sun_alt;        /* -1 midnight, 0 horizon, +1 zenith */
     double sun_x, sun_y;
@@ -65,6 +72,20 @@ typedef struct {
     /* Wind streaks */
     Particle streaks[ANIM_MAX_STREAKS];
     int      streak_count;
+
+    /* Wind as pixels per second across the screen, sign included */
+    double   wind_vx;
+
+    /* Rain hitting the ground */
+    Splash   splashes[ANIM_MAX_SPLASHES];
+    int      splash_next;
+
+    /* Thunderstorm */
+    double   flash;        /* 1.0 at the strike, decaying */
+    double   next_flash;   /* seconds until the next one */
+    double   bolt_x[ANIM_BOLT_POINTS];
+    double   bolt_y[ANIM_BOLT_POINTS];
+    int      bolt_points;
 
     /* Screen dimensions */
     int width;

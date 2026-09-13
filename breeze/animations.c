@@ -77,9 +77,12 @@ static void sky_stop(const AnimState *state, int stop, double rgb[3])
     for (int i = 0; i < 3; i++)
 	rgb[i] = lerp(ca[i], cb[i], t);
 
+    /* Overcast drains the colour and the light both */
     double grey = (rgb[0] + rgb[1] + rgb[2]) / 3.0;
+    double dim = lerp(1.0, 0.58, cover);
+
     for (int i = 0; i < 3; i++)
-	rgb[i] = lerp(rgb[i], grey, cover * 0.55);
+	rgb[i] = lerp(rgb[i], grey, cover * 0.55) * dim;
 }
 
 /*
@@ -234,6 +237,74 @@ static void update_clouds(AnimState *state, double dt)
     }
 }
 
+/*
+ * Wind direction is where the wind comes FROM, so a westerly (270) has
+ * to push things to the right of the screen.
+ */
+static void update_wind(AnimState *state)
+{
+    double ms = state->weather.windspeed / 3.6;
+
+    state->wind_vx = -sin(state->weather.winddirection * M_PI / 180.0) * ms * 20.0;
+}
+
+static void add_splash(AnimState *state, double x, double y)
+{
+    Splash *sp = &state->splashes[state->splash_next];
+
+    sp->x = x;
+    sp->y = y;
+    sp->age = 0.0;
+    state->splash_next = (state->splash_next + 1) % ANIM_MAX_SPLASHES;
+}
+
+static void update_splashes(AnimState *state, double dt)
+{
+    for (int i = 0; i < ANIM_MAX_SPLASHES; i++) {
+	Splash *sp = &state->splashes[i];
+
+	if (sp->age < 1.0)
+	    sp->age += dt * 2.6;
+    }
+}
+
+static void strike(AnimState *state)
+{
+    double x = state->width * (0.15 + randf() * 0.70);
+    double y = state->height * 0.14;
+
+    state->flash = 1.0;
+    state->bolt_points = ANIM_BOLT_POINTS;
+
+    for (int i = 0; i < state->bolt_points; i++) {
+	double t = (double)i / (state->bolt_points - 1);
+
+	state->bolt_x[i] = x + (randf() - 0.5) * state->width * 0.11 * (1.0 - t * 0.4);
+	state->bolt_y[i] = lerp(y, state->horizon, t);
+    }
+}
+
+static void update_lightning(AnimState *state, double dt)
+{
+    if (state->weather.type != WEATHER_THUNDERSTORM) {
+	state->flash = 0.0;
+	state->next_flash = 0.0;
+	return;
+    }
+
+    if (state->flash > 0.0) {
+	state->flash -= dt * 3.2;
+	if (state->flash < 0.0)
+	    state->flash = 0.0;
+    }
+
+    state->next_flash -= dt;
+    if (state->next_flash <= 0.0) {
+	strike(state);
+	state->next_flash = 3.0 + randf() * 9.0;
+    }
+}
+
 static void update_particles(AnimState *state, double dt)
 {
     bool rain = (state->weather.type == WEATHER_RAIN ||
@@ -274,14 +345,23 @@ static void update_particles(AnimState *state, double dt)
         Particle *p = &state->particles[i];
 
         p->y += p->speed * dt;
+	p->x += state->wind_vx * (snow ? 0.45 : 1.0) * dt;
 
         if (snow) {
             p->wobble_phase += dt * 2.0;
             p->x += sin(p->wobble_phase) * 20.0 * dt;
         }
 
-        /* Wrap around at bottom */
-        if (p->y > state->height) {
+	/* Blown off the side, come back on the other one */
+	if (p->x < -20.0)
+	    p->x += state->width + 40.0;
+	else if (p->x > state->width + 20.0)
+	    p->x -= state->width + 40.0;
+
+	/* Land on the ground rather than sail past it */
+        if (p->y > state->horizon) {
+	    if (!snow && randf() < 0.5)
+		add_splash(state, p->x, state->horizon);
             p->y = -10.0;
             p->x = randf() * state->width;
         }
@@ -305,7 +385,9 @@ static void update_streaks(AnimState *state, double dt)
     while (state->streak_count < target) {
         Particle *s = &state->streaks[state->streak_count];
 
-        s->x    = -randf() * state->width * 0.3;
+        s->x    = state->wind_vx < 0
+		? state->width * (1.0 + randf() * 0.3)
+		: -randf() * state->width * 0.3;
         s->y    = randf() * state->height;
         s->speed = 150.0 + wind_ms * 20.0 + randf() * 100.0;
         s->size  = 30.0 + randf() * 50.0;  /* streak length */
@@ -317,12 +399,15 @@ static void update_streaks(AnimState *state, double dt)
 
     for (int i = 0; i < state->streak_count; i++) {
         Particle *s = &state->streaks[i];
+	double dir = state->wind_vx < 0 ? -1.0 : 1.0;
 
-        s->x += s->speed * dt;
+        s->x += s->speed * dir * dt;
 
-        if (s->x > state->width + s->size) {
-            s->x = -s->size - randf() * state->width * 0.2;
-            s->y = randf() * state->height;
+        if ((dir > 0 && s->x > state->width + s->size) ||
+	    (dir < 0 && s->x < -s->size)) {
+            s->x = dir > 0 ? -s->size - randf() * state->width * 0.2
+			   : state->width + s->size + randf() * state->width * 0.2;
+            s->y = randf() * state->height * 0.85;
             s->speed = 150.0 + wind_ms * 20.0 + randf() * 100.0;
         }
     }
@@ -334,9 +419,12 @@ void anim_update(AnimState *state, double dt, const WeatherData *weather)
     state->time_accum += dt;
 
     update_sky(state);
+    update_wind(state);
     update_clouds(state, dt);
     update_particles(state, dt);
     update_streaks(state, dt);
+    update_splashes(state, dt);
+    update_lightning(state, dt);
 }
 
 /* ------------------------------------------------------------------ */
@@ -529,7 +617,7 @@ static void draw_clouds(const AnimState *state, cairo_t *cr)
 	    };
 
 	    for (int k = 0; k < 3; k++) {
-		double grey = lerp(1.0, 0.62, cover);
+		double grey = lerp(1.0, 0.50, cover);
 
 		lit[k] *= grey;
 		shade[k] *= grey;
@@ -630,6 +718,12 @@ static void hill_path(const AnimState *state, cairo_t *cr, double base,
     cairo_close_path(cr);
 }
 
+static void near_ridge(const AnimState *state, cairo_t *cr)
+{
+    hill_path(state, cr, state->horizon + state->height * 0.055,
+	      state->height * 0.038, 2.1 / state->width * M_PI, 2.6);
+}
+
 static void draw_horizon(const AnimState *state, cairo_t *cr)
 {
     double bot[3];
@@ -643,10 +737,21 @@ static void draw_horizon(const AnimState *state, cairo_t *cr)
     cairo_fill(cr);
 
     /* Near ridge, near enough black */
-    hill_path(state, cr, state->horizon + state->height * 0.055,
-	      state->height * 0.038, 2.1 / state->width * M_PI, 2.6);
+    near_ridge(state, cr);
     cairo_set_source_rgb(cr, bot[0] * 0.16, bot[1] * 0.15, bot[2] * 0.20);
     cairo_fill(cr);
+}
+
+/* Snow settles along the near ridge instead of vanishing into it */
+static void draw_snow_cap(const AnimState *state, cairo_t *cr)
+{
+    if (state->weather.type != WEATHER_SNOW)
+	return;
+
+    near_ridge(state, cr);
+    cairo_set_source_rgba(cr, 0.95, 0.96, 1.0, 0.55);
+    cairo_set_line_width(cr, 5.0);
+    cairo_stroke(cr);
 }
 
 static void draw_vignette(const AnimState *state, cairo_t *cr)
@@ -671,12 +776,101 @@ static void draw_rain(const AnimState *state, cairo_t *cr)
 
     for (int i = 0; i < state->particle_count; i++) {
         const Particle *p = &state->particles[i];
-        double len = p->size * 8.0;
+        double len = p->size * 8.0 + p->speed * 0.02;
+	double norm = hypot(state->wind_vx, p->speed);
 
+	/* Drops lie along the way they are actually travelling */
         cairo_move_to(cr, p->x, p->y);
-        cairo_line_to(cr, p->x - 1.0, p->y + len);
+        cairo_line_to(cr, p->x + state->wind_vx / norm * len,
+		      p->y + p->speed / norm * len);
         cairo_stroke(cr);
     }
+}
+
+static void draw_splashes(const AnimState *state, cairo_t *cr)
+{
+    cairo_set_line_width(cr, 1.2);
+
+    for (int i = 0; i < ANIM_MAX_SPLASHES; i++) {
+	const Splash *sp = &state->splashes[i];
+	double r, a;
+
+	if (sp->age >= 1.0)
+	    continue;
+
+	r = 2.0 + sp->age * 11.0;
+	a = (1.0 - sp->age) * 0.45;
+
+	cairo_set_source_rgba(cr, 0.72, 0.80, 0.95, a);
+	cairo_save(cr);
+	cairo_translate(cr, sp->x, sp->y);
+	cairo_scale(cr, 1.0, 0.40);
+	cairo_arc(cr, 0, 0, r, M_PI, 2.0 * M_PI);
+	cairo_restore(cr);
+	cairo_stroke(cr);
+    }
+}
+
+static void draw_fog(const AnimState *state, cairo_t *cr)
+{
+    cairo_pattern_t *g;
+
+    if (state->weather.type != WEATHER_FOG)
+	return;
+
+    /* A veil thickening towards the ground */
+    g = cairo_pattern_create_linear(0, state->height * 0.30, 0, state->horizon);
+    cairo_pattern_add_color_stop_rgba(g, 0.0, 0.80, 0.82, 0.85, 0.0);
+    cairo_pattern_add_color_stop_rgba(g, 1.0, 0.82, 0.84, 0.87, 0.55);
+    cairo_set_source(cr, g);
+    cairo_paint(cr);
+    cairo_pattern_destroy(g);
+
+    /* Banks drifting through it */
+    for (int i = 0; i < 6; i++) {
+	double y = state->horizon - (i + 0.4) * state->height * 0.075 +
+		   sin(state->time_accum * 0.13 + i * 1.7) * 7.0;
+	double h = state->height * 0.055;
+	double a = 0.10 + 0.06 * sin(state->time_accum * 0.21 + i);
+	double off = fmod(state->time_accum * (6.0 + i * 2.0) +
+			  state->wind_vx * 0.1 * state->time_accum, 400.0);
+
+	g = cairo_pattern_create_linear(0, y - h / 2, 0, y + h / 2);
+	cairo_pattern_add_color_stop_rgba(g, 0.0, 0.88, 0.90, 0.93, 0.0);
+	cairo_pattern_add_color_stop_rgba(g, 0.5, 0.88, 0.90, 0.93, a);
+	cairo_pattern_add_color_stop_rgba(g, 1.0, 0.88, 0.90, 0.93, 0.0);
+	cairo_set_source(cr, g);
+	cairo_rectangle(cr, -200 + fmod(off, 60.0), y - h / 2,
+			state->width + 400, h);
+	cairo_fill(cr);
+	cairo_pattern_destroy(g);
+    }
+}
+
+static void draw_lightning(const AnimState *state, cairo_t *cr)
+{
+    double f = state->flash;
+
+    if (f <= 0.0)
+	return;
+
+    /* The bolt is only there for the brightest part of the flash */
+    if (f > 0.45 && state->bolt_points > 1) {
+	cairo_move_to(cr, state->bolt_x[0], state->bolt_y[0]);
+	for (int i = 1; i < state->bolt_points; i++)
+	    cairo_line_to(cr, state->bolt_x[i], state->bolt_y[i]);
+
+	cairo_set_source_rgba(cr, 0.85, 0.90, 1.0, 0.35 * f);
+	cairo_set_line_width(cr, 9.0);
+	cairo_stroke_preserve(cr);
+
+	cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, f);
+	cairo_set_line_width(cr, 2.2);
+	cairo_stroke(cr);
+    }
+
+    cairo_set_source_rgba(cr, 1.0, 1.0, 0.97, 0.55 * f * f);
+    cairo_paint(cr);
 }
 
 static void draw_snow(const AnimState *state, cairo_t *cr)
@@ -725,6 +919,7 @@ void anim_draw(const AnimState *state, cairo_t *cr)
     draw_sun(state, cr);
     draw_clouds(state, cr);
     draw_horizon(state, cr);
+    draw_snow_cap(state, cr);
     draw_streaks(state, cr);
 
     bool rain = (state->weather.type == WEATHER_RAIN ||
@@ -733,10 +928,14 @@ void anim_draw(const AnimState *state, cairo_t *cr)
                  state->weather.type == WEATHER_THUNDERSTORM);
     bool snow = (state->weather.type == WEATHER_SNOW);
 
-    if (rain)
+    if (rain) {
         draw_rain(state, cr);
-    else if (snow)
+	draw_splashes(state, cr);
+    } else if (snow) {
         draw_snow(state, cr);
+    }
 
+    draw_fog(state, cr);
+    draw_lightning(state, cr);
     draw_vignette(state, cr);
 }
