@@ -562,6 +562,18 @@ static void draw_meteor(const AnimState *state, cairo_t *cr)
 }
 
 /*
+ * Near the horizon refraction lifts the lower limb of a disc further
+ * than the upper one, squashing it into an ellipse -- roughly a sixth
+ * shorter as it touches down.  It is the same effect the -35/60 degree
+ * constant in sunriset.h accounts for when deciding what counts as
+ * sunrise.  Unlike the swelling below, this one is real.
+ */
+static double horizon_flatten(double alt)
+{
+	return lerp(0.85, 1.0, clampf(alt * 6.0, 0.0, 1.0));
+}
+
+/*
  * Lit limb plus terminator: the right half of the disc, closed by an
  * ellipse whose x radius follows the phase.  Negative radii flip it to
  * the gibbous side, and the whole thing mirrors after full moon.
@@ -589,29 +601,43 @@ static void draw_moon(const AnimState *state, cairo_t *cr)
 	double cover = state->weather.cloudcover / 100.0;
 	double alpha = state->moon_alpha * (1.0 - cover * 0.85);
 	double scale = state->height / 600.0;
-	double r = 26.0 * scale;
+	/* At night sun_alt carries the moon's arc, negated */
+	double high = clampf(-state->sun_alt * 3.0, 0.0, 1.0);
+	/*
+	 * The moon illusion is perceptual, so it cannot happen on a panel
+	 * a metre from your face.  Draw it in instead: a disc of constant
+	 * size reads as wrong to anyone who has watched a moon come up.
+	 */
+	double r = lerp(31.5, 26.0, high) * scale;
+	double flat = horizon_flatten(-state->sun_alt);
+	double halo = lerp(5.0, 4.0, high);
 	cairo_pattern_t *glow;
 
 	if (alpha <= 0.02)
 		return;
 
-	/* Halo */
+	/* Halo, left round: the glow is scattering, not the disc */
 	glow = cairo_pattern_create_radial(state->moon_x, state->moon_y, r * 0.6, state->moon_x,
-	                                   state->moon_y, r * 4.0);
+	                                   state->moon_y, r * halo);
 	cairo_pattern_add_color_stop_rgba(glow, 0.0, 0.85, 0.90, 1.0, 0.18 * alpha);
 	cairo_pattern_add_color_stop_rgba(glow, 1.0, 0.85, 0.90, 1.0, 0.0);
 	cairo_set_source(cr, glow);
-	cairo_arc(cr, state->moon_x, state->moon_y, r * 4.0, 0, 2.0 * M_PI);
+	cairo_arc(cr, state->moon_x, state->moon_y, r * halo, 0, 2.0 * M_PI);
 	cairo_fill(cr);
 	cairo_pattern_destroy(glow);
 
 	/* Earthshine: the unlit disc, just visible */
+	cairo_save(cr);
+	cairo_translate(cr, state->moon_x, state->moon_y);
+	cairo_scale(cr, 1.0, flat);
+	cairo_arc(cr, 0, 0, r, 0, 2.0 * M_PI);
+	cairo_restore(cr);
 	cairo_set_source_rgba(cr, 0.55, 0.60, 0.72, 0.16 * alpha);
-	cairo_arc(cr, state->moon_x, state->moon_y, r, 0, 2.0 * M_PI);
 	cairo_fill(cr);
 
 	cairo_save(cr);
 	cairo_translate(cr, state->moon_x, state->moon_y);
+	cairo_scale(cr, 1.0, flat);
 	if (state->moon_phase >= 0.5)
 		cairo_scale(cr, -1.0, 1.0);
 	moon_path(cr, r, state->moon_phase);
@@ -627,7 +653,9 @@ static void draw_sun(const AnimState *state, cairo_t *cr)
 	double alpha = state->sun_alpha * (1.0 - cover * 0.80);
 	double high = clampf(state->sun_alt * 3.0, 0.0, 1.0);
 	double scale = state->height / 600.0;
+	/* Swollen near the horizon, standing in for the sun illusion */
 	double r = lerp(34.0, 28.0, high) * scale;
+	double flat = horizon_flatten(state->sun_alt);
 	double cx = state->sun_x, cy = state->sun_y;
 	cairo_pattern_t *grad;
 
@@ -649,16 +677,20 @@ static void draw_sun(const AnimState *state, cairo_t *cr)
 	cairo_fill(cr);
 	cairo_pattern_destroy(grad);
 
-	/* Disc, brightest in the middle */
-	grad = cairo_pattern_create_radial(cx, cy, 0, cx, cy, r);
+	/* Disc, squashed by refraction when it is low */
+	cairo_save(cr);
+	cairo_translate(cr, cx, cy);
+	cairo_scale(cr, 1.0, flat);
+	grad = cairo_pattern_create_radial(0, 0, 0, 0, 0, r);
 	cairo_pattern_add_color_stop_rgba(grad, 0.0, 1.0, lerp(0.80, 1.0, high), lerp(0.55, 0.92, high),
 	                                  alpha);
 	cairo_pattern_add_color_stop_rgba(grad, 0.75, cr_, cg_, cb_, alpha);
 	cairo_pattern_add_color_stop_rgba(grad, 1.0, cr_, cg_ * 0.85, cb_ * 0.7, alpha * 0.85);
 	cairo_set_source(cr, grad);
-	cairo_arc(cr, cx, cy, r, 0, 2.0 * M_PI);
+	cairo_arc(cr, 0, 0, r, 0, 2.0 * M_PI);
 	cairo_fill(cr);
 	cairo_pattern_destroy(grad);
+	cairo_restore(cr);
 }
 
 /*
