@@ -355,6 +355,9 @@ static void toggle_web_view(void)
         webkit_web_view_stop_loading(WEBKIT_WEB_VIEW(app.web_view));
         gtk_widget_hide(app.loading_label);
         app.web_loading = FALSE;
+
+        if (app.carousel_weather)
+            carousel_restart();
         return;
     }
 
