@@ -47,14 +47,15 @@ static inline float fast_inv_sqrt(float x)
 	} u;
 	u.f = x;
 	u.i = 0x5f3759df - (u.i >> 1);
-	u.f = u.f * (1.5f - xhalf * u.f * u.f);  /* One Newton iteration */
+	u.f = u.f * (1.5f - xhalf * u.f * u.f); /* One Newton iteration */
 	return u.f;
 }
 
 /* Fast sqrt using inverse sqrt */
 static inline float fast_sqrt(float x)
 {
-	if (x <= 0.0f) return 0.0f;
+	if (x <= 0.0f)
+		return 0.0f;
 	return x * fast_inv_sqrt(x);
 }
 
@@ -62,89 +63,85 @@ static inline float fast_sqrt(float x)
 static inline float fast_sin(float x)
 {
 	/* Wrap to -PI..PI range */
-	while (x > PI) x -= 2.0f * PI;
-	while (x < -PI) x += 2.0f * PI;
+	while (x > PI)
+		x -= 2.0f * PI;
+	while (x < -PI)
+		x += 2.0f * PI;
 
 	/* Taylor series: sin(x) ≈ x - x³/6 + x⁵/120 */
 	float x2 = x * x;
-	return x * (1.0f - x2 * (1.0f/6.0f - x2/120.0f));
+	return x * (1.0f - x2 * (1.0f / 6.0f - x2 / 120.0f));
 }
 
 /* Fast cosine using sin(x + PI/2) */
 static inline float fast_cos(float x)
 {
-	return fast_sin(x + PI/2.0f);
+	return fast_sin(x + PI / 2.0f);
 }
 
-typedef enum {
-    SCROLL_NONE,
-    SCROLL_SINE_WAVE,
-    SCROLL_CLASSIC,
-    SCROLL_ROLLER_3D,
-    SCROLL_BOUNCE
-} ScrollStyle;
+typedef enum { SCROLL_NONE, SCROLL_SINE_WAVE, SCROLL_CLASSIC, SCROLL_ROLLER_3D, SCROLL_BOUNCE } ScrollStyle;
 
 typedef struct {
-    float x, y, z;
+	float x, y, z;
 } Star;
 
 typedef struct {
-    float x, y;          /* Current position */
-    float vx, vy;        /* Velocity */
-    Uint32 color;        /* Pixel color from logo */
-    int active;          /* Is this particle alive? */
-    float wobble_phase;  /* For wobble animation */
+	float x, y;         /* Current position */
+	float vx, vy;       /* Velocity */
+	Uint32 color;       /* Pixel color from logo */
+	int active;         /* Is this particle alive? */
+	float wobble_phase; /* For wobble animation */
 } LogoParticle;
 
 typedef struct {
-    SDL_Window *window;
-    SDL_Renderer *renderer;
-    SDL_Texture *texture;
-    SDL_Texture *plasma_texture;
-    Uint32 *pixels;
-    TTF_Font *font;
-    TTF_Font *font_outline;
-    SDL_Surface *jack_surface;
-    SDL_Texture *jack_texture;
-    SDL_Surface *logo_surface;
-    SDL_Texture *logo_texture;
-    SDL_Surface *infix_surface;
-    SDL_Texture *infix_texture;
-    SDL_Surface *wires_surface;
-    SDL_Texture *wires_texture;
-    int current_scene;
-    int current_scene_index;  /* Index into scene_list */
-    int fixed_scene;
-    float time;
-    float global_time;
-    float fade_alpha;
-    int fading;
-    ScrollStyle scroll_style;
-    Star stars[NUM_STARS];
-    Uint32 scene_duration;  /* Milliseconds per scene */
-    int scene_list[16];     /* Custom scene order */
-    int num_scenes;         /* Number of scenes in list */
-    char *scroll_text;      /* Dynamically loaded scroll text */
-    /* Scroll control state */
-    float scroll_speed;     /* Current scroll speed */
-    float scroll_pause_until; /* Global time to pause until */
-    Uint8 scroll_color[3];  /* Current scroll color (RGB) */
-    float scroll_offset;    /* Accumulated scroll offset */
-    float last_frame_time;  /* Time of last frame for delta calculation */
-    int roller_effect;      /* Roller text effect: 0=all, 1=no outline, 2=no outline/glow, 3=color outline */
-    /* Tunnel effect optimization LUTs */
-    float *tunnel_distance; /* Pre-calculated distance from center */
-    float *tunnel_angle;    /* Pre-calculated angle from center */
-    /* Plasma effect optimization */
-    float *plasma_distance; /* Pre-calculated distance for 400x300 plasma */
-    Uint32 *plasma_palette; /* Color palette LUT (256 colors) */
+	SDL_Window *window;
+	SDL_Renderer *renderer;
+	SDL_Texture *texture;
+	SDL_Texture *plasma_texture;
+	Uint32 *pixels;
+	TTF_Font *font;
+	TTF_Font *font_outline;
+	SDL_Surface *jack_surface;
+	SDL_Texture *jack_texture;
+	SDL_Surface *logo_surface;
+	SDL_Texture *logo_texture;
+	SDL_Surface *infix_surface;
+	SDL_Texture *infix_texture;
+	SDL_Surface *wires_surface;
+	SDL_Texture *wires_texture;
+	int current_scene;
+	int current_scene_index; /* Index into scene_list */
+	int fixed_scene;
+	float time;
+	float global_time;
+	float fade_alpha;
+	int fading;
+	ScrollStyle scroll_style;
+	Star stars[NUM_STARS];
+	Uint32 scene_duration; /* Milliseconds per scene */
+	int scene_list[16];    /* Custom scene order */
+	int num_scenes;        /* Number of scenes in list */
+	char *scroll_text;     /* Dynamically loaded scroll text */
+	/* Scroll control state */
+	float scroll_speed;       /* Current scroll speed */
+	float scroll_pause_until; /* Global time to pause until */
+	Uint8 scroll_color[3];    /* Current scroll color (RGB) */
+	float scroll_offset;      /* Accumulated scroll offset */
+	float last_frame_time;    /* Time of last frame for delta calculation */
+	int roller_effect; /* Roller text effect: 0=all, 1=no outline, 2=no outline/glow, 3=color outline */
+	/* Tunnel effect optimization LUTs */
+	float *tunnel_distance; /* Pre-calculated distance from center */
+	float *tunnel_angle;    /* Pre-calculated angle from center */
+	/* Plasma effect optimization */
+	float *plasma_distance; /* Pre-calculated distance for 400x300 plasma */
+	Uint32 *plasma_palette; /* Color palette LUT (256 colors) */
 } DemoContext;
 
 /* Plasma effect - optimized with lower resolution and LUT */
 void render_plasma(DemoContext *ctx)
 {
-	#define PLASMA_W 400
-	#define PLASMA_H 300
+#define PLASMA_W 400
+#define PLASMA_H 300
 
 	/* Use global_time so plasma doesn't reset every scene */
 	float t = ctx->global_time * 0.8;
@@ -165,7 +162,7 @@ void render_plasma(DemoContext *ctx)
 	/* Lock plasma texture for direct pixel access */
 	Uint32 *pixels;
 	int pitch;
-	SDL_LockTexture(ctx->plasma_texture, NULL, (void**)&pixels, &pitch);
+	SDL_LockTexture(ctx->plasma_texture, NULL, (void **)&pixels, &pitch);
 	int stride = pitch / 4;
 
 	for (int y = 0; y < PLASMA_H; y++) {
@@ -184,9 +181,7 @@ void render_plasma(DemoContext *ctx)
 			/* Pre-calculate sin(dist) term once */
 			float dist_sin = sinf(dist * 0.02f + t * 1.2f);
 
-			float v = sinx[fx] + siny[fy] +
-			         sinx[(fx + fy) % (PLASMA_W * 2)] +
-			         dist_sin;
+			float v = sinx[fx] + siny[fy] + sinx[(fx + fy) % (PLASMA_W * 2)] + dist_sin;
 
 			/* Use color palette LUT - convert value to palette index */
 			int palette_idx = ((int)(v * 32.0f) & 0xFF);
@@ -225,8 +220,10 @@ void render_starfield(DemoContext *ctx)
 
 		/* Calculate brightness based on distance */
 		int brightness = (int)(255 * (1.0f - ctx->stars[i].z / 100.0f));
-		if (brightness < 0) brightness = 0;
-		if (brightness > 255) brightness = 255;
+		if (brightness < 0)
+			brightness = 0;
+		if (brightness > 255)
+			brightness = 255;
 
 		/* Draw star */
 		if (sx >= 0 && sx < WIDTH && sy >= 0 && sy < HEIGHT) {
@@ -234,7 +231,8 @@ void render_starfield(DemoContext *ctx)
 			ctx->pixels[sy * WIDTH + sx] = color;
 
 			/* Draw larger stars for closer ones */
-			if (ctx->stars[i].z < 20.0f && sx > 0 && sy > 0 && sx < WIDTH - 1 && sy < HEIGHT - 1) {
+			if (ctx->stars[i].z < 20.0f && sx > 0 && sy > 0 && sx < WIDTH - 1 &&
+			    sy < HEIGHT - 1) {
 				ctx->pixels[sy * WIDTH + sx - 1] = color;
 				ctx->pixels[sy * WIDTH + sx + 1] = color;
 				ctx->pixels[(sy - 1) * WIDTH + sx] = color;
@@ -251,7 +249,7 @@ void render_starfield(DemoContext *ctx)
 	/* Periodic particle bursts from center (draw before sphere) */
 	static float last_burst_time = -999.0f;
 	static int burst_style = 0;
-	float burst_interval = 2.5f;  /* Burst every 2.5 seconds */
+	float burst_interval = 2.5f; /* Burst every 2.5 seconds */
 
 	int cx = WIDTH / 2;
 	int cy = HEIGHT / 2;
@@ -259,7 +257,7 @@ void render_starfield(DemoContext *ctx)
 	/* Trigger new burst periodically */
 	if (ctx->global_time - last_burst_time > burst_interval) {
 		last_burst_time = ctx->global_time;
-		burst_style = (burst_style + 1) % 3;  /* Cycle through 3 styles */
+		burst_style = (burst_style + 1) % 3; /* Cycle through 3 styles */
 	}
 
 	float time_since_burst = ctx->global_time - last_burst_time;
@@ -272,7 +270,8 @@ void render_starfield(DemoContext *ctx)
 			float angle, radius;
 			int px, py, r, g, b;
 			float life = 1.0f - (time_since_burst / 2.0f);
-			if (life < 0.0f) life = 0.0f;
+			if (life < 0.0f)
+				life = 0.0f;
 
 			if (burst_style == 0) {
 				/* Style 0: Radial explosion (rainbow) */
@@ -291,7 +290,7 @@ void render_starfield(DemoContext *ctx)
 				angle = (i / (float)num_particles) * 2 * PI;
 				float spiral_speed = 100.0f;
 				radius = spiral_speed * time_since_burst;
-				float spiral_rotation = time_since_burst * 3.0f;  /* Spiral effect */
+				float spiral_rotation = time_since_burst * 3.0f; /* Spiral effect */
 				px = cx + (int)(radius * cosf(angle + spiral_rotation));
 				py = cy + (int)(radius * sinf(angle + spiral_rotation));
 
@@ -305,7 +304,8 @@ void render_starfield(DemoContext *ctx)
 				int ring = i % 4;
 				float ring_delay = ring * 0.15f;
 				float ring_time = time_since_burst - ring_delay;
-				if (ring_time < 0.0f) ring_time = 0.0f;
+				if (ring_time < 0.0f)
+					ring_time = 0.0f;
 
 				radius = 120.0f * ring_time;
 				px = cx + (int)(radius * cosf(angle));
@@ -313,7 +313,8 @@ void render_starfield(DemoContext *ctx)
 
 				/* Adjust life based on ring delay */
 				float ring_life = 1.0f - (ring_time / 1.8f);
-				if (ring_life < 0.0f) ring_life = 0.0f;
+				if (ring_life < 0.0f)
+					ring_life = 0.0f;
 
 				r = (int)(255 * ring_life);
 				g = (int)(150 * ring_life);
@@ -328,7 +329,7 @@ void render_starfield(DemoContext *ctx)
 				int alpha = (int)((255.0f / (layer + 1)) * life);
 				SDL_SetRenderDrawColor(ctx->renderer, r, g, b, alpha);
 
-				SDL_Rect rect = {px - layer, py - layer, layer * 2 + 1, layer * 2 + 1};
+				SDL_Rect rect = { px - layer, py - layer, layer * 2 + 1, layer * 2 + 1 };
 				SDL_RenderFillRect(ctx->renderer, &rect);
 			}
 
@@ -347,11 +348,11 @@ void render_starfield(DemoContext *ctx)
 		int orig_h = ctx->infix_surface->h;
 		int logo_w = (int)(orig_w * 0.4f);
 		int logo_h = (int)(orig_h * 0.4f);
-		int logo_x = 20;  /* Upper left corner */
+		int logo_x = 20; /* Upper left corner */
 		int logo_y = 20;
 
 		/* Create fire effect buffer matching logo dimensions */
-		static Uint32 fire_buffer[512 * 256];  /* Fire buffer */
+		static Uint32 fire_buffer[512 * 256]; /* Fire buffer */
 		static int fire_frame_skip = 0;
 		int fire_w = logo_w;
 		int fire_h = logo_h;
@@ -376,10 +377,10 @@ void render_starfield(DemoContext *ctx)
 					int x_right = (x + 1) % fire_w;
 
 					/* Average 4 neighboring pixels with exact formula */
-					int sum = fire_buffer[y1 * fire_w + x_left];   /* Below-left */
-					sum += fire_buffer[y1 * fire_w + x];           /* Below */
-					sum += fire_buffer[y1 * fire_w + x_right];     /* Below-right */
-					sum += fire_buffer[y2 * fire_w + x];           /* Two rows below */
+					int sum = fire_buffer[y1 * fire_w + x_left]; /* Below-left */
+					sum += fire_buffer[y1 * fire_w + x];         /* Below */
+					sum += fire_buffer[y1 * fire_w + x_right];   /* Below-right */
+					sum += fire_buffer[y2 * fire_w + x];         /* Two rows below */
 
 					/* Apply decay: (sum * 32) / 129 */
 					fire_buffer[y * fire_w + x] = (sum * 32) / 129;
@@ -395,10 +396,13 @@ void render_starfield(DemoContext *ctx)
 				/* Sample logo to see if we should show fire here (logo acts as mask) */
 				int sample_x = (x * orig_w) / logo_w;
 				int sample_y = (y * orig_h) / logo_h;
-				if (sample_x >= orig_w) sample_x = orig_w - 1;
-				if (sample_y >= orig_h) sample_y = orig_h - 1;
+				if (sample_x >= orig_w)
+					sample_x = orig_w - 1;
+				if (sample_y >= orig_h)
+					sample_y = orig_h - 1;
 
-				Uint8 *pixel = (Uint8*)ctx->infix_surface->pixels + sample_y * ctx->infix_surface->pitch +
+				Uint8 *pixel = (Uint8 *)ctx->infix_surface->pixels +
+				               sample_y * ctx->infix_surface->pitch +
 				               sample_x * ctx->infix_surface->format->BytesPerPixel;
 				Uint32 color;
 				memcpy(&color, pixel, ctx->infix_surface->format->BytesPerPixel);
@@ -408,9 +412,11 @@ void render_starfield(DemoContext *ctx)
 				/* Only render fire where logo has pixels (logo is the window) */
 				if (a > 128) {
 					int heat = fire_buffer[y * fire_w + x];
-					if (heat > 10) {  /* Skip very dim pixels */
-						/* Simple fire palette: dark red -> bright red -> orange -> yellow */
-						int shifted_heat = ((int)(heat + palette_shift)) % 200;  /* Cycle through lower range */
+					if (heat > 10) { /* Skip very dim pixels */
+						/* Simple fire palette: dark red -> bright red -> orange ->
+						 * yellow */
+						int shifted_heat = ((int)(heat + palette_shift)) %
+						                   200; /* Cycle through lower range */
 
 						int fire_r, fire_g, fire_b;
 						if (shifted_heat < 100) {
@@ -425,10 +431,11 @@ void render_starfield(DemoContext *ctx)
 							fire_b = 0;
 						}
 
-						SDL_Rect pixel_rect = {logo_x + x, logo_y + y, 2, 2};
+						SDL_Rect pixel_rect = { logo_x + x, logo_y + y, 2, 2 };
 
 						SDL_SetRenderDrawBlendMode(ctx->renderer, SDL_BLENDMODE_ADD);
-						SDL_SetRenderDrawColor(ctx->renderer, fire_r, fire_g, fire_b, heat);
+						SDL_SetRenderDrawColor(ctx->renderer, fire_r, fire_g, fire_b,
+						                       heat);
 						SDL_RenderFillRect(ctx->renderer, &pixel_rect);
 					}
 				}
@@ -436,7 +443,7 @@ void render_starfield(DemoContext *ctx)
 		}
 
 		/* Optionally draw logo outline on top for definition (with low alpha) */
-		SDL_Rect logo_rect = {logo_x, logo_y, logo_w, logo_h};
+		SDL_Rect logo_rect = { logo_x, logo_y, logo_w, logo_h };
 		SDL_SetTextureAlphaMod(ctx->infix_texture, 100);
 		SDL_RenderCopy(ctx->renderer, ctx->infix_texture, NULL, &logo_rect);
 		SDL_SetTextureAlphaMod(ctx->infix_texture, 255);
@@ -449,11 +456,11 @@ void render_starfield(DemoContext *ctx)
 		int orig_h = ctx->wires_surface->h;
 		int logo_w = (int)(orig_w * 0.50f);
 		int logo_h = (int)(orig_h * 0.50f);
-		int logo_x = WIDTH - logo_w - 20;  /* Upper right corner */
+		int logo_x = WIDTH - logo_w - 20; /* Upper right corner */
 		int logo_y = 20;
 
 		/* Create fire effect buffer matching logo dimensions */
-		static Uint32 wires_fire_buffer[512 * 256];  /* Fire buffer for wires */
+		static Uint32 wires_fire_buffer[512 * 256]; /* Fire buffer for wires */
 		static int wires_fire_frame_skip = 0;
 		int fire_w = logo_w;
 		int fire_h = logo_h;
@@ -497,10 +504,13 @@ void render_starfield(DemoContext *ctx)
 				/* Sample logo - scale coordinates back to original dimensions */
 				int sample_x = (x * orig_w) / logo_w;
 				int sample_y = (y * orig_h) / logo_h;
-				if (sample_x >= orig_w) sample_x = orig_w - 1;
-				if (sample_y >= orig_h) sample_y = orig_h - 1;
+				if (sample_x >= orig_w)
+					sample_x = orig_w - 1;
+				if (sample_y >= orig_h)
+					sample_y = orig_h - 1;
 
-				Uint8 *pixel = (Uint8*)ctx->wires_surface->pixels + sample_y * ctx->wires_surface->pitch +
+				Uint8 *pixel = (Uint8 *)ctx->wires_surface->pixels +
+				               sample_y * ctx->wires_surface->pitch +
 				               sample_x * ctx->wires_surface->format->BytesPerPixel;
 				Uint32 color;
 				memcpy(&color, pixel, ctx->wires_surface->format->BytesPerPixel);
@@ -524,10 +534,11 @@ void render_starfield(DemoContext *ctx)
 							fire_b = 0;
 						}
 
-						SDL_Rect pixel_rect = {logo_x + x, logo_y + y, 2, 2};
+						SDL_Rect pixel_rect = { logo_x + x, logo_y + y, 2, 2 };
 
 						SDL_SetRenderDrawBlendMode(ctx->renderer, SDL_BLENDMODE_ADD);
-						SDL_SetRenderDrawColor(ctx->renderer, fire_r, fire_g, fire_b, heat);
+						SDL_SetRenderDrawColor(ctx->renderer, fire_r, fire_g, fire_b,
+						                       heat);
 						SDL_RenderFillRect(ctx->renderer, &pixel_rect);
 					}
 				}
@@ -535,14 +546,15 @@ void render_starfield(DemoContext *ctx)
 		}
 
 		/* Draw logo outline on top */
-		SDL_Rect logo_rect = {logo_x, logo_y, logo_w, logo_h};
+		SDL_Rect logo_rect = { logo_x, logo_y, logo_w, logo_h };
 		SDL_SetTextureAlphaMod(ctx->wires_texture, 100);
 		SDL_RenderCopy(ctx->renderer, ctx->wires_texture, NULL, &logo_rect);
 		SDL_SetTextureAlphaMod(ctx->wires_texture, 255);
 	}
 
 	/* Rotating textured sphere in center with Jack image */
-	if (!ctx->jack_texture) return;
+	if (!ctx->jack_texture)
+		return;
 
 	float sphere_radius = 80.0f;
 	float rotation_y = ctx->global_time * 0.8f;
@@ -602,12 +614,15 @@ void render_starfield(DemoContext *ctx)
 			float avg_z = (z0 + z1 + z2 + z3) / 4.0f;
 
 			/* Skip if quad is facing away (back side of sphere) */
-			if (avg_z < 0) continue;
+			if (avg_z < 0)
+				continue;
 
 			/* Lighting based on Z depth */
 			int brightness = (int)(128 + 127 * (avg_z / sphere_radius));
-			if (brightness < 0) brightness = 0;
-			if (brightness > 255) brightness = 255;
+			if (brightness < 0)
+				brightness = 0;
+			if (brightness > 255)
+				brightness = 255;
 
 			for (int i = 0; i < 4; i++) {
 				verts[i].color.r = brightness;
@@ -617,7 +632,7 @@ void render_starfield(DemoContext *ctx)
 			}
 
 			/* Render quad as two triangles */
-			int indices[6] = {0, 1, 2, 0, 2, 3};
+			int indices[6] = { 0, 1, 2, 0, 2, 3 };
 			SDL_RenderGeometry(ctx->renderer, ctx->jack_texture, verts, 4, indices, 6);
 		}
 	}
@@ -668,7 +683,7 @@ void render_cube(DemoContext *ctx)
 
 		/* HSV to RGB for rainbow effect */
 		float hue = (i / (float)num_bars + t * 0.1);
-		hue = hue - floor(hue);  /* Keep in 0-1 range */
+		hue = hue - floor(hue); /* Keep in 0-1 range */
 
 		int h_section = (int)(hue * 6);
 		float f = hue * 6 - h_section;
@@ -678,6 +693,7 @@ void render_cube(DemoContext *ctx)
 		int t_val = (int)(v * f);
 
 		int r, g, b;
+		/* clang-format off */
 		switch (h_section % 6) {
 		case 0: r = v; g = t_val; b = p; break;
 		case 1: r = q; g = v; b = p; break;
@@ -686,6 +702,7 @@ void render_cube(DemoContext *ctx)
 		case 4: r = t_val; g = p; b = v; break;
 		default: r = v; g = p; b = q; break;
 		}
+		/* clang-format on */
 
 		/* Draw bar with gradient */
 		for (int dy = 0; dy < bar_height; dy++) {
@@ -693,7 +710,7 @@ void render_cube(DemoContext *ctx)
 			if (y >= 0 && y < HEIGHT) {
 				/* Gradient brightness based on position in bar */
 				float brightness = 1.0f - fabsf(dy - bar_height / 2.0f) / (bar_height / 2.0f);
-				brightness = brightness * brightness;  /* Squared for sharper falloff */
+				brightness = brightness * brightness; /* Squared for sharper falloff */
 
 				int br = (int)(r * brightness);
 				int bg = (int)(g * brightness);
@@ -715,10 +732,12 @@ void render_cube(DemoContext *ctx)
 	}
 
 	/* Define cube vertices */
+	/* clang-format off */
 	float vertices[8][3] = {
 		{-1, -1, -1}, {1, -1, -1}, {1, 1, -1}, {-1, 1, -1},
 		{-1, -1, 1}, {1, -1, 1}, {1, 1, 1}, {-1, 1, 1}
 	};
+	/* clang-format on */
 
 	/* Rotate and project */
 	float angle_x = ctx->time * 0.7;
@@ -767,10 +786,12 @@ void render_cube(DemoContext *ctx)
 	SDL_RenderCopy(ctx->renderer, ctx->texture, NULL, NULL);
 
 	/* Define faces */
+	/* clang-format off */
 	int faces[6][4] = {
 		{0, 1, 2, 3}, {4, 5, 6, 7}, {0, 1, 5, 4},
 		{2, 3, 7, 6}, {0, 3, 7, 4}, {1, 2, 6, 5}
 	};
+	/* clang-format on */
 
 	/* Build sortable face list */
 	struct facez {
@@ -779,8 +800,9 @@ void render_cube(DemoContext *ctx)
 	} fl[6];
 
 	for (int f = 0; f < 6; f++) {
-		float avg_z = (rotated[faces[f][0]][2] + rotated[faces[f][1]][2] +
-		               rotated[faces[f][2]][2] + rotated[faces[f][3]][2]) / 4.0f;
+		float avg_z = (rotated[faces[f][0]][2] + rotated[faces[f][1]][2] + rotated[faces[f][2]][2] +
+		               rotated[faces[f][3]][2]) /
+		              4.0f;
 		fl[f].idx = f;
 		fl[f].z = avg_z;
 	}
@@ -823,13 +845,17 @@ void render_cube(DemoContext *ctx)
 
 			/* UV coordinates - map texture to quad with tiny inset to avoid edge artifacts */
 			float inset = 0.001f;
-			verts[0].tex_coord.x = inset;     verts[0].tex_coord.y = inset;
-			verts[1].tex_coord.x = 1.0f - inset; verts[1].tex_coord.y = inset;
-			verts[2].tex_coord.x = 1.0f - inset; verts[2].tex_coord.y = 1.0f - inset;
-			verts[3].tex_coord.x = inset;     verts[3].tex_coord.y = 1.0f - inset;
+			verts[0].tex_coord.x = inset;
+			verts[0].tex_coord.y = inset;
+			verts[1].tex_coord.x = 1.0f - inset;
+			verts[1].tex_coord.y = inset;
+			verts[2].tex_coord.x = 1.0f - inset;
+			verts[2].tex_coord.y = 1.0f - inset;
+			verts[3].tex_coord.x = inset;
+			verts[3].tex_coord.y = 1.0f - inset;
 
 			/* Render two triangles to form the quad */
-			int indices[6] = {0, 1, 2, 0, 2, 3};
+			int indices[6] = { 0, 1, 2, 0, 2, 3 };
 			SDL_RenderGeometry(ctx->renderer, ctx->jack_texture, verts, 4, indices, 6);
 		}
 	}
@@ -855,7 +881,8 @@ void render_tunnel(DemoContext *ctx)
 			float dy = y - eye_y;
 
 			float distance = fast_sqrt(dx * dx + dy * dy);
-			if (distance < 1.0f) distance = 1.0f; /* Avoid division by zero */
+			if (distance < 1.0f)
+				distance = 1.0f; /* Avoid division by zero */
 
 			/* Use pre-calculated angle from LUT (reduces atan2 calls) */
 			float angle = ctx->tunnel_angle[idx];
@@ -873,7 +900,8 @@ void render_tunnel(DemoContext *ctx)
 			int b = ((pattern << 4) & 0xFF);
 
 			float vignette = 1.0 - (distance / (WIDTH / 2));
-			if (vignette < 0) vignette = 0;
+			if (vignette < 0)
+				vignette = 0;
 
 			r = (int)(r * vignette);
 			g = (int)(g * vignette);
@@ -887,9 +915,9 @@ void render_tunnel(DemoContext *ctx)
 /* 3D star ball that bounces */
 void render_star_ball(DemoContext *ctx)
 {
-	/* Generate sphere vertices using fibonacci sphere */
-	#define NUM_BALL_STARS 200
-	#define NUM_BG_STARS 150
+/* Generate sphere vertices using fibonacci sphere */
+#define NUM_BALL_STARS 200
+#define NUM_BG_STARS 150
 	static float sphere_points[NUM_BALL_STARS][3];
 	static int initialized = 0;
 	static float ball_x = 400.0f;
@@ -902,7 +930,7 @@ void render_star_ball(DemoContext *ctx)
 	/* Parallax background stars (3 layers) */
 	typedef struct {
 		float x, y;
-		int layer;  /* 0=far, 1=mid, 2=near */
+		int layer; /* 0=far, 1=mid, 2=near */
 		int brightness;
 	} BgStar;
 	static BgStar bg_stars[NUM_BG_STARS];
@@ -910,7 +938,7 @@ void render_star_ball(DemoContext *ctx)
 
 	if (!initialized) {
 		/* Generate points on sphere using fibonacci spiral */
-		float phi = (1.0f + sqrtf(5.0f)) / 2.0f;  /* Golden ratio */
+		float phi = (1.0f + sqrtf(5.0f)) / 2.0f; /* Golden ratio */
 		for (int i = 0; i < NUM_BALL_STARS; i++) {
 			float t = (float)i / NUM_BALL_STARS;
 			float inc = acosf(1.0f - 2.0f * t);
@@ -928,10 +956,11 @@ void render_star_ball(DemoContext *ctx)
 		for (int i = 0; i < NUM_BG_STARS; i++) {
 			bg_stars[i].x = (float)(rand() % WIDTH);
 			bg_stars[i].y = (float)(rand() % HEIGHT);
-			bg_stars[i].layer = i % 3;  /* Distribute across 3 layers */
+			bg_stars[i].layer = i % 3; /* Distribute across 3 layers */
 			/* Fainter stars for farther layers */
 			bg_stars[i].brightness = (bg_stars[i].layer == 0) ? 60 :
-			                         (bg_stars[i].layer == 1) ? 90 : 120;
+			                         (bg_stars[i].layer == 1) ? 90 :
+			                                                    120;
 		}
 		bg_initialized = 1;
 	}
@@ -942,11 +971,10 @@ void render_star_ball(DemoContext *ctx)
 	}
 
 	/* Render and update parallax background stars (scrolling opposite to text) */
-	float scroll_speed = 180.0f;  /* Match text scroll speed */
+	float scroll_speed = 180.0f; /* Match text scroll speed */
 	for (int i = 0; i < NUM_BG_STARS; i++) {
 		/* Different speeds per layer for parallax effect */
-		float layer_speed = (bg_stars[i].layer == 0) ? 0.2f :
-		                    (bg_stars[i].layer == 1) ? 0.4f : 0.6f;
+		float layer_speed = (bg_stars[i].layer == 0) ? 0.2f : (bg_stars[i].layer == 1) ? 0.4f : 0.6f;
 
 		/* Scroll left (opposite of text which scrolls left to right when viewing) */
 		bg_stars[i].x += scroll_speed * layer_speed * 0.016f;
@@ -972,20 +1000,21 @@ void render_star_ball(DemoContext *ctx)
 	for (int i = 0; i < num_bars; i++) {
 		/* Calculate bar position with sine wave motion */
 		float base_y = (i * HEIGHT / num_bars) + sinf(t * 1.2f + i * 0.9f) * 60.0f;
-		int bar_height = 50;  /* Fatter bars */
+		int bar_height = 50; /* Fatter bars */
 
 		/* HSV to RGB for rainbow effect */
 		float hue = (i / (float)num_bars + t * 0.15f);
-		hue = hue - floorf(hue);  /* Keep in 0-1 range */
+		hue = hue - floorf(hue); /* Keep in 0-1 range */
 
 		int h_section = (int)(hue * 6);
 		float f = hue * 6 - h_section;
-		int v = 160;  /* Dimmer so ball and stars stand out */
+		int v = 160; /* Dimmer so ball and stars stand out */
 		int p = 0;
 		int q = (int)(v * (1 - f));
 		int t_val = (int)(v * f);
 
 		int r, g, b;
+		/* clang-format off */
 		switch (h_section % 6) {
 		case 0: r = v; g = t_val; b = p; break;
 		case 1: r = q; g = v; b = p; break;
@@ -994,14 +1023,15 @@ void render_star_ball(DemoContext *ctx)
 		case 4: r = t_val; g = p; b = v; break;
 		default: r = v; g = p; b = q; break;
 		}
+		/* clang-format on */
 
 		/* Draw bar with gradient */
 		for (int dy = 0; dy < bar_height; dy++) {
 			int y = (int)base_y + dy;
-			if (y >= 0 && y < HEIGHT - 100) {  /* Leave room for scroll text */
+			if (y >= 0 && y < HEIGHT - 100) { /* Leave room for scroll text */
 				/* Gradient brightness based on position in bar */
 				float brightness = 1.0f - fabsf(dy - bar_height / 2.0f) / (bar_height / 2.0f);
-				brightness = brightness * brightness;  /* Squared for sharper falloff */
+				brightness = brightness * brightness; /* Squared for sharper falloff */
 
 				int br = (int)(r * brightness);
 				int bg = (int)(g * brightness);
@@ -1027,14 +1057,14 @@ void render_star_ball(DemoContext *ctx)
 	if (ball_x - radius < 0 || ball_x + radius > WIDTH) {
 		vel_x = -vel_x;
 		ball_x = (ball_x < WIDTH / 2) ? radius : WIDTH - radius;
-		squash_x = 1.0f - squash_intensity;  /* Squash horizontally */
-		squash_y = 1.0f + squash_intensity;  /* Stretch vertically */
+		squash_x = 1.0f - squash_intensity; /* Squash horizontally */
+		squash_y = 1.0f + squash_intensity; /* Stretch vertically */
 	}
 	if (ball_y - radius < 0 || ball_y + radius > HEIGHT) {
 		vel_y = -vel_y;
 		ball_y = (ball_y < HEIGHT / 2) ? radius : HEIGHT - radius;
-		squash_y = 1.0f - squash_intensity;  /* Squash vertically */
-		squash_x = 1.0f + squash_intensity;  /* Stretch horizontally */
+		squash_y = 1.0f - squash_intensity; /* Squash vertically */
+		squash_x = 1.0f + squash_intensity; /* Stretch horizontally */
 	}
 
 	/* Recover to normal shape */
@@ -1081,8 +1111,10 @@ void render_star_ball(DemoContext *ctx)
 
 		/* Color based on depth (closer = brighter) */
 		int brightness = (int)(128 + 127 * depth);
-		if (brightness < 0) brightness = 0;
-		if (brightness > 255) brightness = 255;
+		if (brightness < 0)
+			brightness = 0;
+		if (brightness > 255)
+			brightness = 255;
 
 		/* Draw star with size based on depth */
 		if (sx >= 1 && sx < WIDTH - 1 && sy >= 1 && sy < HEIGHT - 1) {
@@ -1125,7 +1157,7 @@ void render_rotozoomer(DemoContext *ctx)
 
 	/* Rotation angle and zoom factor */
 	float angle = t * 0.5f;
-	float zoom = 1.5f + sinf(t * 0.7f) * 0.8f;  /* Breathing zoom */
+	float zoom = 1.5f + sinf(t * 0.7f) * 0.8f; /* Breathing zoom */
 
 	/* Center point with drift */
 	float center_x = WIDTH / 2.0f + sinf(t * 0.3f) * 40.0f;
@@ -1163,11 +1195,11 @@ void render_rotozoomer(DemoContext *ctx)
 	SDL_RenderClear(ctx->renderer);
 	SDL_RenderCopy(ctx->renderer, ctx->texture, NULL, NULL);
 
-	/* Starball temporarily disabled - hard to see with Jack background */
-	#if 0
+/* Starball temporarily disabled - hard to see with Jack background */
+#if 0
 	/* Now render the bouncing starball on top */
 	/* Extract starball rendering code inline */
-	#define NUM_BALL_STARS 200
+#define NUM_BALL_STARS 200
 	static float sphere_points[NUM_BALL_STARS][3];
 	static int initialized = 0;
 	static float ball_x = 400.0f;
@@ -1282,7 +1314,7 @@ void render_rotozoomer(DemoContext *ctx)
 	}
 
 	SDL_SetRenderDrawBlendMode(ctx->renderer, SDL_BLENDMODE_BLEND);
-	#endif  /* Starball disabled */
+#endif /* Starball disabled */
 }
 
 /* Checkered floor perspective effect */
@@ -1300,16 +1332,16 @@ void render_checkered_floor(DemoContext *ctx)
 	}
 
 	/* Floor parameters */
-	float horizon_y = HEIGHT * 0.6f;  /* Horizon line - upper part of screen */
-	float floor_z_far = 50.0f;        /* Far distance */
-	float tile_size = 0.8f;           /* Checkerboard tile size for floor casting */
+	float horizon_y = HEIGHT * 0.6f; /* Horizon line - upper part of screen */
+	float floor_z_far = 50.0f;       /* Far distance */
+	float tile_size = 0.8f;          /* Checkerboard tile size for floor casting */
 
 	/* Floor casting with proper scrolling (based on lodev.org algorithm) */
 
 	/* Camera/player position for scrolling */
 	static float posX = 0.0f;
 	static float posY = 0.0f;
-	posY += 3.0f * 0.016f;  /* Scroll forward - slower to match ball */
+	posY += 3.0f * 0.016f; /* Scroll forward - slower to match ball */
 
 	/* Camera direction (looking straight ahead) */
 	float dirX = 0.0f;
@@ -1330,7 +1362,8 @@ void render_checkered_floor(DemoContext *ctx)
 		int p = y - HEIGHT / 2;
 
 		/* Skip the center horizon line to avoid division by zero */
-		if (p == 0) continue;
+		if (p == 0)
+			continue;
 
 		float posZ = 0.5f * HEIGHT;
 		float rowDistance = posZ / p;
@@ -1347,7 +1380,8 @@ void render_checkered_floor(DemoContext *ctx)
 			/* Get checkerboard tile coordinates */
 			/* Add small offset at center to avoid symmetry artifacts */
 			float checkX = floorX;
-			if (x == WIDTH / 2) checkX += 0.01f;
+			if (x == WIDTH / 2)
+				checkX += 0.01f;
 
 			int cellX = (int)floorf(checkX / tile_size);
 			int cellY = (int)floorf(floorY / tile_size);
@@ -1373,18 +1407,18 @@ void render_checkered_floor(DemoContext *ctx)
 	SDL_RenderClear(ctx->renderer);
 	SDL_RenderCopy(ctx->renderer, ctx->texture, NULL, NULL);
 
-	/* Now render the bouncing starball on top */
-	#define NUM_FLOOR_BALL_STARS 200
+/* Now render the bouncing starball on top */
+#define NUM_FLOOR_BALL_STARS 200
 	static float sphere_points[NUM_FLOOR_BALL_STARS][3];
 	static int initialized = 0;
 	static float ball_x = 400.0f;
-	static float ball_y = 0.0f;   /* Will be set above horizon on first run */
-	static float vel_x = 2.0f;    /* Calmer horizontal movement */
+	static float ball_y = 0.0f; /* Will be set above horizon on first run */
+	static float vel_x = 2.0f;  /* Calmer horizontal movement */
 	static float vel_y = 0.0f;  /* Vertical velocity for bounce */
 
 	if (!initialized) {
 		/* Generate points on sphere using fibonacci spiral */
-		float phi = (1.0f + sqrtf(5.0f)) / 2.0f;  /* Golden ratio */
+		float phi = (1.0f + sqrtf(5.0f)) / 2.0f; /* Golden ratio */
 		for (int i = 0; i < NUM_FLOOR_BALL_STARS; i++) {
 			float t = (float)i / NUM_FLOOR_BALL_STARS;
 			float inc = acosf(1.0f - 2.0f * t);
@@ -1394,8 +1428,8 @@ void render_checkered_floor(DemoContext *ctx)
 			sphere_points[i][1] = sinf(inc) * sinf(azi);
 			sphere_points[i][2] = cosf(inc);
 		}
-		ball_y = horizon_y - 100.0f;  /* Initialize well above horizon */
-		vel_y = -300.0f;  /* Give it initial upward velocity to start bouncing */
+		ball_y = horizon_y - 100.0f; /* Initialize well above horizon */
+		vel_y = -300.0f;             /* Give it initial upward velocity to start bouncing */
 		initialized = 1;
 	}
 
@@ -1404,7 +1438,7 @@ void render_checkered_floor(DemoContext *ctx)
 	float bounce_damping = 0.85f; /* Less damping = bouncier */
 
 	/* Update physics */
-	vel_y += gravity * 0.016f;  /* Apply gravity */
+	vel_y += gravity * 0.016f; /* Apply gravity */
 	ball_y += vel_y * 0.016f;
 
 	/* Bounce on floor - the floor is at the horizon line */
@@ -1413,7 +1447,7 @@ void render_checkered_floor(DemoContext *ctx)
 		vel_y = -vel_y * bounce_damping;
 		/* Add a small energy boost to keep it bouncing forever */
 		if (fabsf(vel_y) < 500.0f) {
-			vel_y -= 100.0f;  /* Add upward velocity if bounce is getting weak */
+			vel_y -= 100.0f; /* Add upward velocity if bounce is getting weak */
 		}
 	}
 
@@ -1464,20 +1498,24 @@ void render_checkered_floor(DemoContext *ctx)
 
 		/* Color based on depth */
 		int brightness = (int)(150 + 105 * depth);
-		if (brightness < 0) brightness = 0;
-		if (brightness > 255) brightness = 255;
+		if (brightness < 0)
+			brightness = 0;
+		if (brightness > 255)
+			brightness = 255;
 
 		/* Draw star with glow */
 		if (sx >= 1 && sx < WIDTH - 1 && sy >= 1 && sy < HEIGHT - 1) {
 			if (z > 0) {
-				SDL_SetRenderDrawColor(ctx->renderer, brightness, brightness, brightness, 255);
+				SDL_SetRenderDrawColor(ctx->renderer, brightness, brightness, brightness,
+				                       255);
 				SDL_RenderDrawPoint(ctx->renderer, sx, sy);
 				SDL_RenderDrawPoint(ctx->renderer, sx - 1, sy);
 				SDL_RenderDrawPoint(ctx->renderer, sx + 1, sy);
 				SDL_RenderDrawPoint(ctx->renderer, sx, sy - 1);
 				SDL_RenderDrawPoint(ctx->renderer, sx, sy + 1);
 			} else {
-				SDL_SetRenderDrawColor(ctx->renderer, brightness, brightness, brightness, 255);
+				SDL_SetRenderDrawColor(ctx->renderer, brightness, brightness, brightness,
+				                       255);
 				SDL_RenderDrawPoint(ctx->renderer, sx, sy);
 			}
 		}
@@ -1489,10 +1527,10 @@ void render_checkered_floor(DemoContext *ctx)
 /* Bouncing logo effect with squash and stretch */
 void render_bouncing_logo(DemoContext *ctx)
 {
-	static float squash_x = 1.0f;  /* Horizontal scale factor */
-	static float squash_y = 1.0f;  /* Vertical scale factor */
-//	static float prev_x = -1.0f;   /* Previous x position */
-	static float prev_y = -1.0f;   /* Previous y position */
+	static float squash_x = 1.0f; /* Horizontal scale factor */
+	static float squash_y = 1.0f; /* Vertical scale factor */
+	                              //	static float prev_x = -1.0f;   /* Previous x position */
+	static float prev_y = -1.0f;  /* Previous y position */
 
 	/* Clear to dark blue background */
 	for (int i = 0; i < WIDTH * HEIGHT; i++) {
@@ -1516,17 +1554,17 @@ void render_bouncing_logo(DemoContext *ctx)
 	float bounce_y = fabs(sin(t * 1.1)) * (HEIGHT - logo_h - 50) + 25;
 
 	/* Detect edge collisions by checking velocity direction changes */
-	float squash_intensity = 0.1f;  /* How much to squash (0.1 = 10% compression) */
-	float recovery_speed = 0.25f;   /* How fast to recover to normal */
+	float squash_intensity = 0.1f; /* How much to squash (0.1 = 10% compression) */
+	float recovery_speed = 0.25f;  /* How fast to recover to normal */
 
 	/* Check horizontal collision (left/right edges) */
 	/*if (prev_x >= 0) {
-		float dx = bounce_x - prev_x;
-		// Detect direction change = wall hit
-		if ((prev_x <= 5 && dx > 0) || (prev_x >= WIDTH - logo_w - 5 && dx < 0)) {
-			squash_x = 1.0f - squash_intensity;  // Squash horizontally
-			squash_y = 1.0f + squash_intensity;  // Stretch vertically
-		}
+	        float dx = bounce_x - prev_x;
+	        // Detect direction change = wall hit
+	        if ((prev_x <= 5 && dx > 0) || (prev_x >= WIDTH - logo_w - 5 && dx < 0)) {
+	                squash_x = 1.0f - squash_intensity;  // Squash horizontally
+	                squash_y = 1.0f + squash_intensity;  // Stretch vertically
+	        }
 	}*/
 
 	/* Check vertical collision (top/bottom edges) */
@@ -1534,8 +1572,8 @@ void render_bouncing_logo(DemoContext *ctx)
 		float dy = bounce_y - prev_y;
 		/* Detect direction change = floor/ceiling hit */
 		if ((prev_y <= 30 && dy > 0) || (prev_y >= HEIGHT - logo_h - 30 && dy < 0)) {
-			squash_y = 1.0f - squash_intensity;  /* Squash vertically */
-			squash_x = 1.0f + squash_intensity;  /* Stretch horizontally */
+			squash_y = 1.0f - squash_intensity; /* Squash vertically */
+			squash_x = 1.0f + squash_intensity; /* Stretch horizontally */
 		}
 	}
 
@@ -1544,27 +1582,25 @@ void render_bouncing_logo(DemoContext *ctx)
 	squash_y += (1.0f - squash_y) * recovery_speed;
 
 	/* Clamp to prevent overshoot */
-	if (fabs(squash_x - 1.0f) < 0.01f) squash_x = 1.0f;
-	if (fabs(squash_y - 1.0f) < 0.01f) squash_y = 1.0f;
+	if (fabs(squash_x - 1.0f) < 0.01f)
+		squash_x = 1.0f;
+	if (fabs(squash_y - 1.0f) < 0.01f)
+		squash_y = 1.0f;
 
 	/* Store position for next frame */
-//	prev_x = bounce_x;
+	//	prev_x = bounce_x;
 	prev_y = bounce_y;
 
 	/* Add some gentle rotation */
-	float rotation = sin(t * 0.5) * 8.0;  /* ±8 degrees */
+	float rotation = sin(t * 0.5) * 8.0; /* ±8 degrees */
 
 	/* Apply squash and stretch to dimensions */
 	int scaled_w = (int)(logo_w * squash_x);
 	int scaled_h = (int)(logo_h * squash_y);
 
 	/* Center the scaled logo at the bounce position */
-	SDL_Rect dest_rect = {
-		(int)(bounce_x + (logo_w - scaled_w) / 2),
-		(int)(bounce_y + (logo_h - scaled_h) / 2),
-		scaled_w,
-		scaled_h
-	};
+	SDL_Rect dest_rect = { (int)(bounce_x + (logo_w - scaled_w) / 2),
+		               (int)(bounce_y + (logo_h - scaled_h) / 2), scaled_w, scaled_h };
 
 	/* Update background texture */
 	SDL_UpdateTexture(ctx->texture, NULL, ctx->pixels, WIDTH * sizeof(Uint32));
@@ -1572,19 +1608,18 @@ void render_bouncing_logo(DemoContext *ctx)
 	SDL_RenderCopy(ctx->renderer, ctx->texture, NULL, NULL);
 
 	/* Render the rotating, squashing logo */
-	SDL_RenderCopyEx(ctx->renderer, ctx->logo_texture, NULL, &dest_rect,
-	                 rotation, NULL, SDL_FLIP_NONE);
+	SDL_RenderCopyEx(ctx->renderer, ctx->logo_texture, NULL, &dest_rect, rotation, NULL, SDL_FLIP_NONE);
 }
 
 /* Raining logo effect - logo falls in line by line from bottom to top */
 void render_raining_logo(DemoContext *ctx)
 {
-	/* Animation phases */
-	#define PHASE_RAIN_IN 0
-	#define PHASE_SETTLE 1
-	#define PHASE_WOBBLE 2
-	#define PHASE_RAIN_OUT 3
-	#define PHASE_PAUSE 4
+/* Animation phases */
+#define PHASE_RAIN_IN 0
+#define PHASE_SETTLE 1
+#define PHASE_WOBBLE 2
+#define PHASE_RAIN_OUT 3
+#define PHASE_PAUSE 4
 
 	static int current_phase = PHASE_RAIN_IN;
 	static float phase_time = 0.0f;
@@ -1605,37 +1640,37 @@ void render_raining_logo(DemoContext *ctx)
 	SDL_QueryTexture(ctx->logo_texture, NULL, NULL, &logo_w, &logo_h);
 
 	/* Update animation time */
-	float dt = 0.016f;  /* Assume 60 fps */
+	float dt = 0.016f; /* Assume 60 fps */
 	phase_time += dt;
 
 	/* Phase transitions */
 	switch (current_phase) {
 	case PHASE_RAIN_IN:
-		if (phase_time > 2.0f) {  /* 2 seconds to rain in */
+		if (phase_time > 2.0f) { /* 2 seconds to rain in */
 			current_phase = PHASE_SETTLE;
 			phase_time = 0.0f;
 		}
 		break;
 	case PHASE_SETTLE:
-		if (phase_time > 0.3f) {  /* 0.3 seconds settling */
+		if (phase_time > 0.3f) { /* 0.3 seconds settling */
 			current_phase = PHASE_WOBBLE;
 			phase_time = 0.0f;
 		}
 		break;
 	case PHASE_WOBBLE:
-		if (phase_time > 1.5f) {  /* 1.5 seconds wobbling */
+		if (phase_time > 1.5f) { /* 1.5 seconds wobbling */
 			current_phase = PHASE_RAIN_OUT;
 			phase_time = 0.0f;
 		}
 		break;
 	case PHASE_RAIN_OUT:
-		if (phase_time > 2.0f) {  /* 2 seconds to rain out */
+		if (phase_time > 2.0f) { /* 2 seconds to rain out */
 			current_phase = PHASE_PAUSE;
 			phase_time = 0.0f;
 		}
 		break;
 	case PHASE_PAUSE:
-		if (phase_time > 0.5f) {  /* 0.5 second pause */
+		if (phase_time > 0.5f) { /* 0.5 second pause */
 			current_phase = PHASE_RAIN_IN;
 			phase_time = 0.0f;
 		}
@@ -1667,21 +1702,20 @@ void render_raining_logo(DemoContext *ctx)
 
 				/* Stop at target position */
 				float target = base_y + src_y;
-				if (y_pos > target) y_pos = target;
+				if (y_pos > target)
+					y_pos = target;
 
 				SDL_Rect src = { 0, src_y, logo_w, 1 };
 				SDL_Rect dst = { base_x, (int)y_pos, logo_w, 1 };
 				SDL_RenderCopy(ctx->renderer, ctx->logo_texture, &src, &dst);
 			}
 		}
-	}
-	else if (current_phase == PHASE_SETTLE) {
+	} else if (current_phase == PHASE_SETTLE) {
 		/* Slight bounce */
 		float settle = exp(-phase_time * 10.0f) * sin(phase_time * 30.0f) * 5.0f;
 		SDL_Rect dst = { base_x, base_y + (int)settle, logo_w, logo_h };
 		SDL_RenderCopy(ctx->renderer, ctx->logo_texture, NULL, &dst);
-	}
-	else if (current_phase == PHASE_WOBBLE) {
+	} else if (current_phase == PHASE_WOBBLE) {
 		/* Jelly wobble - each line wobbles horizontally with different phase */
 		for (int line = 0; line < logo_h; line++) {
 			/* Sine wave wobble based on line position */
@@ -1695,8 +1729,7 @@ void render_raining_logo(DemoContext *ctx)
 			SDL_Rect dst = { base_x + (int)wobble, base_y + line, logo_w, 1 };
 			SDL_RenderCopy(ctx->renderer, ctx->logo_texture, &src, &dst);
 		}
-	}
-	else if (current_phase == PHASE_RAIN_OUT) {
+	} else if (current_phase == PHASE_RAIN_OUT) {
 		/* Rain out through bottom, top lines fall first with gravity */
 		for (int line = 0; line < logo_h; line++) {
 			int src_y = line;
@@ -1734,10 +1767,10 @@ static int calculate_skip_spaces(float skip_screens)
 
 /* Build a map of control code positions in the stripped text */
 typedef struct {
-	int position;  /* Character position in stripped text */
-	float pixel_position;  /* Pixel position based on actual glyph widths */
-	char type;     /* P=pause, S=speed, T=style, C=color, K=skip */
-	char data[64]; /* Parameter data */
+	int position;         /* Character position in stripped text */
+	float pixel_position; /* Pixel position based on actual glyph widths */
+	char type;            /* P=pause, S=speed, T=style, C=color, K=skip */
+	char data[64];        /* Parameter data */
 } ControlCode;
 
 static ControlCode control_codes[256];
@@ -1750,7 +1783,7 @@ static void build_control_map(const char *text)
 
 	num_control_codes = 0;
 	const char *p = text;
-	int char_pos = 0;  /* Position in stripped text */
+	int char_pos = 0; /* Position in stripped text */
 
 	while (*p && num_control_codes < 256) {
 		if (*p == '{') {
@@ -1760,12 +1793,13 @@ static void build_control_map(const char *text)
 			if (end) {
 				int len = end - start;
 				if (len > 0 && len < 64) {
-					char cmd[64] = {0};
+					char cmd[64] = { 0 };
 					strncpy(cmd, start, len);
 
 					ControlCode *cc = &control_codes[num_control_codes];
 					cc->position = char_pos;
-					cc->pixel_position = -1.0f;  /* Will be calculated later with actual font metrics */
+					cc->pixel_position =
+					        -1.0f; /* Will be calculated later with actual font metrics */
 
 					if (strncmp(cmd, "PAUSE:", 6) == 0) {
 						cc->type = 'P';
@@ -1784,7 +1818,8 @@ static void build_control_map(const char *text)
 						strncpy(cc->data, cmd + 6, 63);
 						num_control_codes++;
 					} else if (strncmp(cmd, "SKIP:", 5) == 0) {
-						/* SKIP is added to control codes for pixel position calculation */
+						/* SKIP is added to control codes for pixel position
+						 * calculation */
 						cc->type = 'K';
 						strncpy(cc->data, cmd + 5, 63);
 						num_control_codes++;
@@ -1803,12 +1838,11 @@ static void build_control_map(const char *text)
 	}
 }
 
-
 /* Apply control codes based on current scroll position */
 static void apply_scroll_controls(DemoContext *ctx, float scroll_offset, float total_width)
 {
 	/* Track which control codes have been triggered */
-	static int triggered[256] = {0};
+	static int triggered[256] = { 0 };
 	static int last_num_codes = 0;
 	static int last_cycle = -1;
 
@@ -1842,24 +1876,22 @@ static void apply_scroll_controls(DemoContext *ctx, float scroll_offset, float t
 
 			switch (cc->type) {
 			case 'P': /* PAUSE */
-				{
-					/* Use strtof for safer parsing with error checking */
-					char *endptr;
-					float pause_sec = strtof(cc->data, &endptr);
-					if (endptr != cc->data && pause_sec > 0) {
-						ctx->scroll_pause_until = ctx->global_time + pause_sec;
-					}
+			{
+				/* Use strtof for safer parsing with error checking */
+				char *endptr;
+				float pause_sec = strtof(cc->data, &endptr);
+				if (endptr != cc->data && pause_sec > 0) {
+					ctx->scroll_pause_until = ctx->global_time + pause_sec;
 				}
-				break;
+			} break;
 
 			case 'S': /* SPEED */
-				{
-					char *endptr;
-					float new_speed = strtof(cc->data, &endptr);
-					if (endptr != cc->data && new_speed >= 0)
-						ctx->scroll_speed = new_speed;
-				}
-				break;
+			{
+				char *endptr;
+				float new_speed = strtof(cc->data, &endptr);
+				if (endptr != cc->data && new_speed >= 0)
+					ctx->scroll_speed = new_speed;
+			} break;
 
 			case 'T': /* STYLE */
 				if (strcmp(cc->data, "wave") == 0)
@@ -1873,15 +1905,14 @@ static void apply_scroll_controls(DemoContext *ctx, float scroll_offset, float t
 				break;
 
 			case 'C': /* COLOR */
-				{
-					int r, g, b;
-					if (sscanf(cc->data, "%d,%d,%d", &r, &g, &b) == 3) {
-						ctx->scroll_color[0] = r;
-						ctx->scroll_color[1] = g;
-						ctx->scroll_color[2] = b;
-					}
+			{
+				int r, g, b;
+				if (sscanf(cc->data, "%d,%d,%d", &r, &g, &b) == 3) {
+					ctx->scroll_color[0] = r;
+					ctx->scroll_color[1] = g;
+					ctx->scroll_color[2] = b;
 				}
-				break;
+			} break;
 			}
 		}
 	}
@@ -1901,7 +1932,7 @@ static char *strip_control_codes(const char *text)
 			const char *end = strchr(p, '}');
 			if (end) {
 				int cmd_len = end - p - 1;
-				char cmd[64] = {0};
+				char cmd[64] = { 0 };
 				if (cmd_len > 0 && cmd_len < 64) {
 					strncpy(cmd, p + 1, cmd_len);
 					/* Check if this is a SKIP command */
@@ -1932,7 +1963,7 @@ static char *strip_control_codes(const char *text)
 			const char *end = strchr(src, '}');
 			if (end) {
 				int cmd_len = end - src - 1;
-				char cmd[64] = {0};
+				char cmd[64] = { 0 };
 				if (cmd_len > 0 && cmd_len < 64) {
 					strncpy(cmd, src + 1, cmd_len);
 					/* Expand SKIP into spaces */
@@ -1970,9 +2001,9 @@ void render_scroll_text(DemoContext *ctx)
 	if (text != last_text) {
 		free(display_text);
 		display_text = strip_control_codes(text);
-		build_control_map(text);  /* Build map when text changes */
+		build_control_map(text); /* Build map when text changes */
 		/* Pixel positions will be calculated later using the glyph cache */
-		needs_pixel_calc = 1;  /* Flag that we need to recalculate pixel positions */
+		needs_pixel_calc = 1; /* Flag that we need to recalculate pixel positions */
 		last_text = text;
 	}
 
@@ -1993,7 +2024,8 @@ void render_scroll_text(DemoContext *ctx)
 		ctx->scroll_offset += ctx->scroll_speed * delta_time;
 	}
 
-	if (ctx->scroll_style == SCROLL_SINE_WAVE || ctx->scroll_style == SCROLL_ROLLER_3D || ctx->scroll_style == SCROLL_BOUNCE) {
+	if (ctx->scroll_style == SCROLL_SINE_WAVE || ctx->scroll_style == SCROLL_ROLLER_3D ||
+	    ctx->scroll_style == SCROLL_BOUNCE) {
 		/* Glyph cache with metrics */
 		typedef struct {
 			SDL_Texture *tex;
@@ -2016,16 +2048,17 @@ void render_scroll_text(DemoContext *ctx)
 		float x_pos = WIDTH;
 
 		for (int i = 0; i < text_len; i++) {
-			char buffer[2] = {display_text[i], '\0'};
+			char buffer[2] = { display_text[i], '\0' };
 			unsigned char ch = (unsigned char)display_text[i];
 
 			/* Render character if not cached */
 			if (!gcache[ch].valid && ch >= 32 && ch < 127) {
-				SDL_Color white = {255, 255, 255, 255};
+				SDL_Color white = { 255, 255, 255, 255 };
 				SDL_Surface *surface = TTF_RenderText_Blended(ctx->font, buffer, white);
 				if (surface) {
 					int minx, maxx, miny, maxy, advance;
-					if (TTF_GlyphMetrics(ctx->font, ch, &minx, &maxx, &miny, &maxy, &advance) == 0)
+					if (TTF_GlyphMetrics(ctx->font, ch, &minx, &maxx, &miny, &maxy,
+					                     &advance) == 0)
 						gcache[ch].adv = advance;
 					else
 						gcache[ch].adv = surface->w;
@@ -2037,10 +2070,12 @@ void render_scroll_text(DemoContext *ctx)
 
 					/* Outline cache for 3D roller */
 					if (ctx->font_outline && ctx->scroll_style == SCROLL_ROLLER_3D) {
-						SDL_Color black = {0, 0, 0, 255};
-						SDL_Surface *os = TTF_RenderText_Blended(ctx->font_outline, buffer, black);
+						SDL_Color black = { 0, 0, 0, 255 };
+						SDL_Surface *os = TTF_RenderText_Blended(ctx->font_outline,
+						                                         buffer, black);
 						if (os) {
-							gcache[ch].tex_outline = SDL_CreateTextureFromSurface(ctx->renderer, os);
+							gcache[ch].tex_outline = SDL_CreateTextureFromSurface(
+							        ctx->renderer, os);
 							SDL_FreeSurface(os);
 						}
 					}
@@ -2065,7 +2100,8 @@ void render_scroll_text(DemoContext *ctx)
 
 					/* Update control code pixel positions at this character position */
 					if (needs_pixel_calc) {
-						while (cc_idx < num_control_codes && control_codes[cc_idx].position == k) {
+						while (cc_idx < num_control_codes &&
+						       control_codes[cc_idx].position == k) {
 							control_codes[cc_idx].pixel_position = pixel_pos;
 #ifdef DEBUG_CONTROL_CODES
 							printf("  Position %d: pixel %.1f, type %c, data '%s'\n",
@@ -2081,7 +2117,7 @@ void render_scroll_text(DemoContext *ctx)
 					int adv = gcache[ck].valid ? gcache[ck].adv : 35;
 					total_adv += adv;
 					pixel_pos += adv;
-#if SDL_TTF_VERSION_ATLEAST(2,0,18)
+#if SDL_TTF_VERSION_ATLEAST(2, 0, 18)
 					if (k > 0) {
 						unsigned char prev = (unsigned char)display_text[k - 1];
 						int kern = TTF_GetFontKerningSizeGlyphs(ctx->font, prev, ck);
@@ -2109,7 +2145,8 @@ void render_scroll_text(DemoContext *ctx)
 			}
 
 			/* Wrap around */
-			while (char_x < -100) char_x += total_adv;
+			while (char_x < -100)
+				char_x += total_adv;
 
 			if (char_x > -100 && char_x < WIDTH + 100 && gcache[ch].valid) {
 				float phase = ctx->global_time * 2.0f + i * 0.3f;
@@ -2134,22 +2171,25 @@ void render_scroll_text(DemoContext *ctx)
 					float scale = 1.0f + 0.25f * cosf(phase);
 					int dw = (int)(gcache[ch].w * scale);
 					int dh = (int)(gcache[ch].h * scale);
-					SDL_Rect dest = {(int)char_x, y_pos - dh / 2, dw, dh};
+					SDL_Rect dest = { (int)char_x, y_pos - dh / 2, dw, dh };
 
 					/* Outline behind (configurable) */
 					if (ctx->roller_effect == 0 || ctx->roller_effect == 3) {
 						if (gcache[ch].tex_outline) {
 							if (ctx->roller_effect == 3) {
 								/* Color outline (thicker text effect) */
-								SDL_SetTextureColorMod(gcache[ch].tex_outline, r, g, b);
+								SDL_SetTextureColorMod(gcache[ch].tex_outline,
+								                       r, g, b);
 							} else {
 								/* Black outline (drop shadow) */
-								SDL_SetTextureColorMod(gcache[ch].tex_outline, 0, 0, 0);
+								SDL_SetTextureColorMod(gcache[ch].tex_outline,
+								                       0, 0, 0);
 							}
 							SDL_Rect od = dest;
 							od.x -= 1;
 							od.y -= 1;
-							SDL_RenderCopy(ctx->renderer, gcache[ch].tex_outline, NULL, &od);
+							SDL_RenderCopy(ctx->renderer, gcache[ch].tex_outline,
+							               NULL, &od);
 						}
 					}
 
@@ -2183,19 +2223,20 @@ void render_scroll_text(DemoContext *ctx)
 					int dh = (int)(gcache[ch].h * squash);
 
 					SDL_SetTextureColorMod(gcache[ch].tex, r, g, b);
-					SDL_Rect dest = {(int)char_x, bounce_y - dh / 2, dw, dh};
+					SDL_Rect dest = { (int)char_x, bounce_y - dh / 2, dw, dh };
 					SDL_RenderCopy(ctx->renderer, gcache[ch].tex, NULL, &dest);
 				} else {
 					/* Simple sine wave */
 					SDL_SetTextureColorMod(gcache[ch].tex, r, g, b);
-					SDL_Rect dest = {(int)char_x, y_pos - gcache[ch].h / 2, gcache[ch].w, gcache[ch].h};
+					SDL_Rect dest = { (int)char_x, y_pos - gcache[ch].h / 2, gcache[ch].w,
+						          gcache[ch].h };
 					SDL_RenderCopy(ctx->renderer, gcache[ch].tex, NULL, &dest);
 				}
 			}
 
 			/* Advance by glyph advance + kerning */
 			int adv = gcache[ch].valid ? gcache[ch].adv : 35;
-#if SDL_TTF_VERSION_ATLEAST(2,0,18)
+#if SDL_TTF_VERSION_ATLEAST(2, 0, 18)
 			if (i > 0) {
 				unsigned char prev = (unsigned char)text[i - 1];
 				int kern = TTF_GetFontKerningSizeGlyphs(ctx->font, prev, ch);
@@ -2219,7 +2260,7 @@ void render_scroll_text(DemoContext *ctx)
 				SDL_DestroyTexture(line_tex);
 				line_tex = NULL;
 			}
-			SDL_Color color = {255, 255, 100, 255};
+			SDL_Color color = { 255, 255, 100, 255 };
 			SDL_Surface *surface = TTF_RenderText_Blended(ctx->font, display_text, color);
 			if (surface) {
 				line_tex = SDL_CreateTextureFromSurface(ctx->renderer, surface);
@@ -2238,8 +2279,10 @@ void render_scroll_text(DemoContext *ctx)
 					for (int k = 0; k < text_len; k++) {
 						unsigned char ch = (unsigned char)display_text[k];
 
-						/* Update control code pixel positions at this character position */
-						while (cc_idx < num_control_codes && control_codes[cc_idx].position == k) {
+						/* Update control code pixel positions at this character
+						 * position */
+						while (cc_idx < num_control_codes &&
+						       control_codes[cc_idx].position == k) {
 							control_codes[cc_idx].pixel_position = pixel_pos;
 #ifdef DEBUG_CONTROL_CODES
 							printf("  Position %d: pixel %.1f, type %c, data '%s'\n",
@@ -2254,13 +2297,14 @@ void render_scroll_text(DemoContext *ctx)
 						/* Get advance width for this character */
 						if (ch >= 32 && ch < 127) {
 							int minx, maxx, miny, maxy, advance;
-							if (TTF_GlyphMetrics(ctx->font, ch, &minx, &maxx, &miny, &maxy, &advance) == 0) {
+							if (TTF_GlyphMetrics(ctx->font, ch, &minx, &maxx,
+							                     &miny, &maxy, &advance) == 0) {
 								pixel_pos += advance;
 							} else {
-								pixel_pos += 20;  /* Fallback */
+								pixel_pos += 20; /* Fallback */
 							}
 						} else {
-							pixel_pos += 20;  /* Fallback for non-printable */
+							pixel_pos += 20; /* Fallback for non-printable */
 						}
 					}
 
@@ -2291,10 +2335,11 @@ void render_scroll_text(DemoContext *ctx)
 
 			/* Scroll position */
 			int scroll_x = (int)(WIDTH - ctx->scroll_offset);
-			while (scroll_x < -line_w) scroll_x += line_w;
+			while (scroll_x < -line_w)
+				scroll_x += line_w;
 
 			/* Draw the line, wrapping around */
-			SDL_Rect dest = {scroll_x, y_pos - h / 2, line_w, h};
+			SDL_Rect dest = { scroll_x, y_pos - h / 2, line_w, h };
 			SDL_RenderCopy(ctx->renderer, line_tex, NULL, &dest);
 
 			/* Draw wrapped copy if needed */
@@ -2336,65 +2381,62 @@ int main(int argc, char *argv[])
 {
 	/* Window/display settings */
 	int fullscreen = 0;
-	int window_width = 0;   /* 0 = auto-detect */
+	int window_width = 0; /* 0 = auto-detect */
 	int window_height = 0;
 	int scale_factor = 1;
-	int auto_resolution = 1;  /* Auto-detect and adapt resolution */
+	int auto_resolution = 1; /* Auto-detect and adapt resolution */
 	const char *scroll_file_path = NULL;
 	int scene_list[6];
 	int num_scenes = 0;
-	int scene_duration = 15000;  /* Default: 15 seconds per scene */
+	int scene_duration = 15000; /* Default: 15 seconds per scene */
 
 	/* Default scroll text */
 	const char *default_text = "Infix OS - The Container demo{PAUSE:2}"
-		"    *** Greetings to the demoscene <3"
-		"    *** Infix is API first: NETCONF + RESTCONF"
-		"    *** Say Hi to our mascot, Jack! :-)"
-		"    *** YANG is the real HERO tho ..."
-		"    *** Sponsored by Wires in Westeros"
-		"    *** From idea to production - we've got you!"
-		"    *** Visit us at https://wires.se"
-		"                                *** ";
+	                           "    *** Greetings to the demoscene <3"
+	                           "    *** Infix is API first: NETCONF + RESTCONF"
+	                           "    *** Say Hi to our mascot, Jack! :-)"
+	                           "    *** YANG is the real HERO tho ..."
+	                           "    *** Sponsored by Wires in Westeros"
+	                           "    *** From idea to production - we've got you!"
+	                           "    *** Visit us at https://wires.se"
+	                           "                                *** ";
 
 	/* Parse command-line arguments */
 
 	static struct option long_options[] = {
-		{"help",       no_argument,       NULL, 'h'},
-		{"duration",   required_argument, NULL, 'd'},
-		{"fullscreen", no_argument,       NULL, 'f'},
-		{"window",     required_argument, NULL, 'w'},
-		{"scale",      required_argument, NULL, 's'},
-		{"text",       required_argument, NULL, 't'},
-		{"roller",     required_argument, NULL, 'r'},
-		{NULL,         0,                 NULL, 0}
+		{ "help",       no_argument,       NULL, 'h' },
+                { "duration",   required_argument, NULL, 'd' },
+		{ "fullscreen", no_argument,       NULL, 'f' },
+                { "window",     required_argument, NULL, 'w' },
+		{ "scale",      required_argument, NULL, 's' },
+                { "text",       required_argument, NULL, 't' },
+		{ "roller",     required_argument, NULL, 'r' },
+                { NULL,         0,                 NULL, 0   }
 	};
 
 	int opt;
-	int roller_effect = 1;  /* Default: no outline, glow only */
+	int roller_effect = 1; /* Default: no outline, glow only */
 	while ((opt = getopt_long(argc, argv, "hd:fw:s:t:r:", long_options, NULL)) != -1) {
 		switch (opt) {
-		case 'h':
-			return usage(0);
+		case 'h': return usage(0);
 
-		case 'd':
-			{
-				int duration_sec = atoi(optarg);
-				if (duration_sec > 0) {
-					scene_duration = duration_sec * 1000;
-				} else {
-					fprintf(stderr, "Error: Invalid duration '%s'. Must be positive.\n", optarg);
-					return 1;
-				}
+		case 'd': {
+			int duration_sec = atoi(optarg);
+			if (duration_sec > 0) {
+				scene_duration = duration_sec * 1000;
+			} else {
+				fprintf(stderr, "Error: Invalid duration '%s'. Must be positive.\n", optarg);
+				return 1;
 			}
-			break;
+		} break;
 
-		case 'f':
-			fullscreen = 1;
-			break;
+		case 'f': fullscreen = 1; break;
 
 		case 'w':
 			if (sscanf(optarg, "%dx%d", &window_width, &window_height) != 2) {
-				fprintf(stderr, "Error: Invalid window size '%s'. Use format WxH (e.g., 1920x1080)\n", optarg);
+				fprintf(stderr,
+				        "Error: Invalid window size '%s'. Use format WxH (e.g., 1920x1080)\n",
+				        optarg);
 				return 1;
 			}
 			/* Adapt render resolution to match aspect ratio */
@@ -2402,7 +2444,7 @@ int main(int argc, char *argv[])
 				float aspect = (float)window_width / window_height;
 				WIDTH = 800;
 				HEIGHT = (int)(800.0f / aspect);
-				auto_resolution = 0;  /* Manual window size disables auto-detection */
+				auto_resolution = 0; /* Manual window size disables auto-detection */
 			}
 			break;
 
@@ -2416,9 +2458,7 @@ int main(int argc, char *argv[])
 			window_height = HEIGHT * scale_factor;
 			break;
 
-		case 't':
-			scroll_file_path = optarg;
-			break;
+		case 't': scroll_file_path = optarg; break;
 
 		case 'r':
 			roller_effect = atoi(optarg);
@@ -2432,8 +2472,7 @@ int main(int argc, char *argv[])
 			}
 			break;
 
-		default:
-			return usage(1);
+		default: return usage(1);
 		}
 	}
 
@@ -2478,16 +2517,16 @@ int main(int argc, char *argv[])
 	}
 
 	/* Initialize demo context */
-	DemoContext ctx = {0};
-	ctx.fixed_scene = -1;  /* -1 means auto-switch scenes */
+	DemoContext ctx = { 0 };
+	ctx.fixed_scene = -1; /* -1 means auto-switch scenes */
 	ctx.current_scene_index = 0;
 	ctx.scene_duration = scene_duration;
-	ctx.scroll_speed = 180.0f;  /* Default scroll speed */
+	ctx.scroll_speed = 180.0f; /* Default scroll speed */
 	ctx.scroll_pause_until = 0.0f;
-	ctx.scroll_color[0] = 0;  /* 0,0,0 means use gradient */
+	ctx.scroll_color[0] = 0; /* 0,0,0 means use gradient */
 	ctx.scroll_color[1] = 0;
 	ctx.scroll_color[2] = 0;
-	ctx.scroll_style = SCROLL_ROLLER_3D;  /* Default scroll style */
+	ctx.scroll_style = SCROLL_ROLLER_3D; /* Default scroll style */
 	ctx.scroll_offset = 0.0f;
 	ctx.last_frame_time = 0.0f;
 	ctx.roller_effect = roller_effect;
@@ -2517,7 +2556,8 @@ int main(int argc, char *argv[])
 					ctx.scroll_text[i] = ' ';
 			}
 		} else {
-			fprintf(stderr, "Warning: Could not open '%s', using default text\n", scroll_file_path);
+			fprintf(stderr, "Warning: Could not open '%s', using default text\n",
+			        scroll_file_path);
 			ctx.scroll_text = strdup(default_text);
 		}
 	} else {
@@ -2529,7 +2569,7 @@ int main(int argc, char *argv[])
 		/* Single scene - fix to that scene */
 		ctx.fixed_scene = scene_list[0];
 		ctx.current_scene = scene_list[0];
-		ctx.num_scenes = 0;  /* Fixed scene, no list */
+		ctx.num_scenes = 0; /* Fixed scene, no list */
 	} else if (num_scenes > 1) {
 		/* Multiple scenes specified - cycle through custom list */
 		for (int i = 0; i < num_scenes; i++) {
@@ -2582,8 +2622,10 @@ int main(int argc, char *argv[])
 	}
 
 	/* Default window size if not set */
-	if (window_width == 0) window_width = WIDTH;
-	if (window_height == 0) window_height = HEIGHT;
+	if (window_width == 0)
+		window_width = WIDTH;
+	if (window_height == 0)
+		window_height = HEIGHT;
 
 	/* fprintf(stderr, "Window: %dx%d, Render: %dx%d\n", */
 	/*         window_width, window_height, WIDTH, HEIGHT); */
@@ -2593,11 +2635,8 @@ int main(int argc, char *argv[])
 		window_flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
 	}
 
-	ctx.window = SDL_CreateWindow("Infix Container Demo",
-	                               SDL_WINDOWPOS_CENTERED,
-	                               SDL_WINDOWPOS_CENTERED,
-	                               window_width, window_height,
-	                               window_flags);
+	ctx.window = SDL_CreateWindow("Infix Container Demo", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+	                              window_width, window_height, window_flags);
 
 	if (!ctx.window) {
 		fprintf(stderr, "Window creation failed: %s\n", SDL_GetError());
@@ -2606,15 +2645,13 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	ctx.renderer = SDL_CreateRenderer(ctx.window, -1,
-		SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+	ctx.renderer =
+	        SDL_CreateRenderer(ctx.window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
 
 	/* Set logical rendering size - render at adapted resolution, display scales automatically */
 	SDL_RenderSetLogicalSize(ctx.renderer, WIDTH, HEIGHT);
 
-	ctx.texture = SDL_CreateTexture(ctx.renderer,
-	                                SDL_PIXELFORMAT_ARGB8888,
-	                                SDL_TEXTUREACCESS_STREAMING,
+	ctx.texture = SDL_CreateTexture(ctx.renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING,
 	                                WIDTH, HEIGHT);
 
 	/* Load embedded Topaz-8 font from memory */
@@ -2629,7 +2666,7 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	ctx.font = TTF_OpenFontRW(font_rw, 1, 48);  /* 1 = automatically close RW */
+	ctx.font = TTF_OpenFontRW(font_rw, 1, 48); /* 1 = automatically close RW */
 	if (!ctx.font) {
 		fprintf(stderr, "Failed to load embedded font: %s\n", TTF_GetError());
 		SDL_DestroyTexture(ctx.texture);
@@ -2652,11 +2689,9 @@ int main(int argc, char *argv[])
 	ctx.pixels = malloc(WIDTH * HEIGHT * sizeof(Uint32));
 
 	/* Create plasma texture (lower resolution for performance) */
-	ctx.plasma_texture = SDL_CreateTexture(ctx.renderer,
-	                                       SDL_PIXELFORMAT_ARGB8888,
-	                                       SDL_TEXTUREACCESS_STREAMING,
-	                                       400, 300);
-	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");  /* Nearest neighbor for retro look */
+	ctx.plasma_texture = SDL_CreateTexture(ctx.renderer, SDL_PIXELFORMAT_ARGB8888,
+	                                       SDL_TEXTUREACCESS_STREAMING, 400, 300);
+	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0"); /* Nearest neighbor for retro look */
 
 	/* Load embedded jack.png from memory */
 	SDL_RWops *image_rw = SDL_RWFromConstMem(jack_png, jack_png_len);
@@ -2666,14 +2701,15 @@ int main(int argc, char *argv[])
 		ctx.jack_texture = NULL;
 		ctx.jack_surface = NULL;
 	} else {
-		ctx.jack_surface = IMG_Load_RW(image_rw, 1);  /* 1 = automatically close RW */
+		ctx.jack_surface = IMG_Load_RW(image_rw, 1); /* 1 = automatically close RW */
 		if (!ctx.jack_surface) {
 			fprintf(stderr, "Warning: Failed to load embedded image: %s\n", IMG_GetError());
 			fprintf(stderr, "Cube will render without texture.\n");
 			ctx.jack_texture = NULL;
 		} else {
 			/* Convert to RGB888 format to strip alpha channel */
-			SDL_Surface *converted = SDL_ConvertSurfaceFormat(ctx.jack_surface, SDL_PIXELFORMAT_RGB888, 0);
+			SDL_Surface *converted =
+			        SDL_ConvertSurfaceFormat(ctx.jack_surface, SDL_PIXELFORMAT_RGB888, 0);
 			if (converted) {
 				SDL_FreeSurface(ctx.jack_surface);
 				ctx.jack_surface = converted;
@@ -2695,7 +2731,7 @@ int main(int argc, char *argv[])
 		ctx.logo_texture = NULL;
 		ctx.logo_surface = NULL;
 	} else {
-		ctx.logo_surface = IMG_Load_RW(logo_rw, 1);  /* 1 = automatically close RW */
+		ctx.logo_surface = IMG_Load_RW(logo_rw, 1); /* 1 = automatically close RW */
 		if (!ctx.logo_surface) {
 			fprintf(stderr, "Warning: Failed to load embedded logo: %s\n", IMG_GetError());
 			fprintf(stderr, "Bouncing logo scene will not render.\n");
@@ -2714,7 +2750,7 @@ int main(int argc, char *argv[])
 		ctx.infix_texture = NULL;
 		ctx.infix_surface = NULL;
 	} else {
-		ctx.infix_surface = IMG_Load_RW(infix_rw, 1);  /* 1 = automatically close RW */
+		ctx.infix_surface = IMG_Load_RW(infix_rw, 1); /* 1 = automatically close RW */
 		if (!ctx.infix_surface) {
 			fprintf(stderr, "Warning: Failed to load embedded infix: %s\n", IMG_GetError());
 			ctx.infix_texture = NULL;
@@ -2732,7 +2768,7 @@ int main(int argc, char *argv[])
 		ctx.wires_texture = NULL;
 		ctx.wires_surface = NULL;
 	} else {
-		ctx.wires_surface = IMG_Load_RW(wires_rw, 1);  /* 1 = automatically close RW */
+		ctx.wires_surface = IMG_Load_RW(wires_rw, 1); /* 1 = automatically close RW */
 		if (!ctx.wires_surface) {
 			fprintf(stderr, "Warning: Failed to load embedded wires: %s\n", IMG_GetError());
 			ctx.wires_texture = NULL;
@@ -2769,9 +2805,9 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "Warning: Failed to allocate tunnel LUT\n");
 	}
 
-	/* Initialize plasma LUT for optimization */
-	#define PLASMA_W 400
-	#define PLASMA_H 300
+/* Initialize plasma LUT for optimization */
+#define PLASMA_W 400
+#define PLASMA_H 300
 	ctx.plasma_distance = malloc(PLASMA_W * PLASMA_H * sizeof(float));
 	ctx.plasma_palette = malloc(256 * sizeof(Uint32));
 	if (ctx.plasma_distance && ctx.plasma_palette) {
@@ -2804,10 +2840,10 @@ int main(int argc, char *argv[])
 	if (audio_available) {
 		SDL_RWops *music_rw = SDL_RWFromConstMem(music_mod, music_mod_len);
 		if (music_rw) {
-			Mix_Music *music = Mix_LoadMUS_RW(music_rw, 1);  /* 1 = auto-free RW */
+			Mix_Music *music = Mix_LoadMUS_RW(music_rw, 1); /* 1 = auto-free RW */
 			if (music) {
-				Mix_PlayMusic(music, -1);  /* -1 = loop forever */
-				Mix_VolumeMusic(MIX_MAX_VOLUME / 2);  /* 50% volume */
+				Mix_PlayMusic(music, -1);            /* -1 = loop forever */
+				Mix_VolumeMusic(MIX_MAX_VOLUME / 2); /* 50% volume */
 			} else {
 				fprintf(stderr, "Warning: Failed to load music: %s\n", Mix_GetError());
 			}
@@ -2837,7 +2873,7 @@ int main(int argc, char *argv[])
 		/* Handle scene transitions with fade (only if not fixed) */
 		if (ctx.fixed_scene == -1) {
 			Uint32 scene_duration = current_time - scene_start;
-			float fade_duration = 300.0f;  /* 300ms fade */
+			float fade_duration = 300.0f; /* 300ms fade */
 
 			if (scene_duration > ctx.scene_duration) {
 				/* Start fade out */
@@ -2856,8 +2892,11 @@ int main(int argc, char *argv[])
 					if (ctx.fade_alpha < 0.5f) {
 						/* Advance to next scene in the list */
 						if (ctx.num_scenes > 0) {
-							ctx.current_scene_index = (ctx.current_scene_index + 1) % ctx.num_scenes;
-							ctx.current_scene = ctx.scene_list[ctx.current_scene_index];
+							ctx.current_scene_index =
+							        (ctx.current_scene_index + 1) %
+							        ctx.num_scenes;
+							ctx.current_scene =
+							        ctx.scene_list[ctx.current_scene_index];
 						}
 						scene_start = current_time - (Uint32)fade_duration;
 						ctx.time = 0;
@@ -2927,7 +2966,7 @@ int main(int argc, char *argv[])
 		if (ctx.fade_alpha < 1.0f) {
 			SDL_SetRenderDrawBlendMode(ctx.renderer, SDL_BLENDMODE_BLEND);
 			SDL_SetRenderDrawColor(ctx.renderer, 0, 0, 0, (Uint8)((1.0f - ctx.fade_alpha) * 255));
-			SDL_Rect fade_rect = {0, 0, WIDTH, HEIGHT};
+			SDL_Rect fade_rect = { 0, 0, WIDTH, HEIGHT };
 			SDL_RenderFillRect(ctx.renderer, &fade_rect);
 		}
 

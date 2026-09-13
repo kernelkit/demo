@@ -4,30 +4,30 @@
 #include <stdbool.h>
 
 typedef enum {
-    WEATHER_CLEAR,
-    WEATHER_PARTLY,
-    WEATHER_OVERCAST,
-    WEATHER_FOG,
-    WEATHER_DRIZZLE,
-    WEATHER_RAIN,
-    WEATHER_SNOW,
-    WEATHER_SHOWERS,
-    WEATHER_THUNDERSTORM
+	WEATHER_CLEAR,
+	WEATHER_PARTLY,
+	WEATHER_OVERCAST,
+	WEATHER_FOG,
+	WEATHER_DRIZZLE,
+	WEATHER_RAIN,
+	WEATHER_SNOW,
+	WEATHER_SHOWERS,
+	WEATHER_THUNDERSTORM
 } WeatherType;
 
 typedef struct {
-    double      temperature;    /* Celsius */
-    double      windspeed;      /* km/h */
-    double      winddirection;  /* degrees, 0=N 90=E 180=S 270=W */
-    WeatherType type;
-    double      intensity;      /* 0.0 - 1.0 */
-    int         cloudcover;     /* 0 - 100 percent */
-    int         humidity;       /* 0 - 100 percent (relative) */
-    double      precipitation;  /* mm */
-    bool        is_day;
-    double      sunrise;        /* hours (e.g. 6.5 = 06:30) */
-    double      sunset;         /* hours */
-    bool        valid;
+	double temperature;   /* Celsius */
+	double windspeed;     /* km/h */
+	double winddirection; /* degrees, 0=N 90=E 180=S 270=W */
+	WeatherType type;
+	double intensity;     /* 0.0 - 1.0 */
+	int cloudcover;       /* 0 - 100 percent */
+	int humidity;         /* 0 - 100 percent (relative) */
+	double precipitation; /* mm */
+	bool is_day;
+	double sunrise; /* hours (e.g. 6.5 = 06:30) */
+	double sunset;  /* hours */
+	bool valid;
 } WeatherData;
 
 /*
