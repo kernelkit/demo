@@ -1,6 +1,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "animations.h"
 
@@ -18,6 +19,124 @@ static double lerp(double a, double b, double t)
     return a + (b - a) * t;
 }
 
+static double clampf(double v, double lo, double hi)
+{
+    return v < lo ? lo : (v > hi ? hi : v);
+}
+
+/* ------------------------------------------------------------------ */
+/* Sky                                                                */
+/* ------------------------------------------------------------------ */
+
+/*
+ * The sky is keyed on the sun's altitude rather than on a day/night
+ * flag, so dawn and dusk get their own colours instead of the sky
+ * snapping between blue and black.  Each key is a three stop gradient,
+ * zenith to horizon, and the sky in between is interpolated.
+ */
+typedef struct {
+    double alt;
+    double top[3];
+    double mid[3];
+    double bot[3];
+} SkyKey;
+
+static const SkyKey sky_keys[] = {
+    { -1.00, { 0.01, 0.02, 0.07 }, { 0.02, 0.04, 0.12 }, { 0.04, 0.06, 0.16 } },
+    { -0.25, { 0.02, 0.04, 0.13 }, { 0.06, 0.09, 0.23 }, { 0.13, 0.13, 0.29 } },
+    { -0.10, { 0.05, 0.09, 0.26 }, { 0.17, 0.18, 0.40 }, { 0.40, 0.28, 0.45 } },
+    {  0.00, { 0.13, 0.20, 0.44 }, { 0.52, 0.34, 0.44 }, { 0.98, 0.56, 0.30 } },
+    {  0.12, { 0.20, 0.38, 0.70 }, { 0.55, 0.58, 0.72 }, { 0.98, 0.76, 0.52 } },
+    {  0.40, { 0.16, 0.38, 0.78 }, { 0.35, 0.60, 0.88 }, { 0.66, 0.82, 0.94 } },
+    {  1.00, { 0.10, 0.32, 0.76 }, { 0.30, 0.58, 0.90 }, { 0.62, 0.80, 0.96 } },
+};
+
+#define SKY_KEYS (int)(sizeof(sky_keys) / sizeof(sky_keys[0]))
+
+/* Overcast drains the colour out of whatever the sky would have been */
+static void sky_stop(const AnimState *state, int stop, double rgb[3])
+{
+    double cover = state->weather.cloudcover / 100.0;
+    const SkyKey *a = &sky_keys[0];
+    const SkyKey *b = &sky_keys[SKY_KEYS - 1];
+    double t = 0.0;
+
+    for (int i = 0; i < SKY_KEYS - 1; i++) {
+	if (state->sun_alt <= sky_keys[i + 1].alt) {
+	    a = &sky_keys[i];
+	    b = &sky_keys[i + 1];
+	    t = (state->sun_alt - a->alt) / (b->alt - a->alt);
+	    break;
+	}
+    }
+    t = clampf(t, 0.0, 1.0);
+
+    const double *ca = stop == 0 ? a->top : (stop == 1 ? a->mid : a->bot);
+    const double *cb = stop == 0 ? b->top : (stop == 1 ? b->mid : b->bot);
+
+    for (int i = 0; i < 3; i++)
+	rgb[i] = lerp(ca[i], cb[i], t);
+
+    double grey = (rgb[0] + rgb[1] + rgb[2]) / 3.0;
+    for (int i = 0; i < 3; i++)
+	rgb[i] = lerp(rgb[i], grey, cover * 0.55);
+}
+
+/*
+ * Moon phase from the synodic month, counting from the new moon of
+ * 2000-01-06.  Good to a few hours, which is a lot finer than the
+ * eight shapes anyone can tell apart on a display.
+ */
+static double moon_phase(time_t now)
+{
+    double days = (double)(now - 947182440) / 86400.0;
+    double phase = fmod(days / 29.530588853, 1.0);
+
+    return phase < 0 ? phase + 1.0 : phase;
+}
+
+static void update_sky(AnimState *state)
+{
+    time_t now = time(NULL);
+    struct tm tm;
+    double hour, rise, set, frac, theta, span;
+
+    localtime_r(&now, &tm);
+    hour = tm.tm_hour + tm.tm_min / 60.0 + tm.tm_sec / 3600.0;
+
+    state->horizon = state->height * 0.82;
+    state->moon_phase = moon_phase(now);
+
+    rise = state->weather.sunrise;
+    set  = state->weather.sunset;
+    if (set - rise < 0.5) {     /* no weather data yet, or polar day */
+	rise = 6.0;
+	set  = 18.0;
+    }
+
+    state->sun_alpha = 0.0;
+    state->moon_alpha = 0.0;
+
+    if (hour >= rise && hour <= set) {
+	frac = (hour - rise) / (set - rise);
+	theta = M_PI * frac;
+	state->sun_alt = sin(theta);
+	state->sun_alpha = clampf(sin(theta) * 12.0, 0.0, 1.0);
+	state->sun_x = state->width * (0.10 + 0.80 * frac);
+	state->sun_y = state->horizon -
+	    sin(theta) * (state->horizon - state->height * 0.12);
+    } else {
+	span = 24.0 - (set - rise);
+	frac = (hour > set ? hour - set : hour + 24.0 - set) / span;
+	theta = M_PI * frac;
+	state->sun_alt = -sin(theta);
+	state->moon_alpha = clampf(sin(theta) * 8.0, 0.0, 1.0);
+	state->moon_x = state->width * (0.10 + 0.80 * frac);
+	state->moon_y = state->horizon -
+	    sin(theta) * (state->horizon - state->height * 0.16);
+    }
+}
+
 /* ------------------------------------------------------------------ */
 /* Initialisation                                                     */
 /* ------------------------------------------------------------------ */
@@ -30,6 +149,18 @@ void anim_init(AnimState *state, int width, int height)
 
     /* Seed with something */
     srand(42);
+
+    /* Stars sit above the horizon, brighter ones sparser */
+    state->star_count = ANIM_MAX_STARS;
+    for (int i = 0; i < state->star_count; i++) {
+	Star *st = &state->stars[i];
+	double b = randf();
+
+	st->x = randf() * width;
+	st->y = randf() * height * 0.80;
+	st->brightness = 0.25 + b * b * 0.75;
+	st->twinkle_phase = randf() * M_PI * 2.0;
+    }
 
     /* Pre-place a few clouds */
     for (int i = 0; i < ANIM_MAX_CLOUDS; i++) {
@@ -166,8 +297,8 @@ void anim_update(AnimState *state, double dt, const WeatherData *weather)
 {
     state->weather = *weather;
     state->time_accum += dt;
-    state->sun_ray_angle += dt * 0.5;
 
+    update_sky(state);
     update_clouds(state, dt);
     update_particles(state, dt);
     update_streaks(state, dt);
@@ -179,82 +310,143 @@ void anim_update(AnimState *state, double dt, const WeatherData *weather)
 
 static void draw_sky(const AnimState *state, cairo_t *cr)
 {
+    double top[3], mid[3], bot[3];
     cairo_pattern_t *grad;
-    double cloud_gray = state->weather.cloudcover / 100.0;
 
-    if (state->weather.is_day) {
-        /* Daytime: blue to light blue, grayer with clouds */
-        double r_top = lerp(0.15, 0.45, cloud_gray);
-        double g_top = lerp(0.35, 0.45, cloud_gray);
-        double b_top = lerp(0.75, 0.55, cloud_gray);
+    sky_stop(state, 0, top);
+    sky_stop(state, 1, mid);
+    sky_stop(state, 2, bot);
 
-        double r_bot = lerp(0.55, 0.65, cloud_gray);
-        double g_bot = lerp(0.75, 0.70, cloud_gray);
-        double b_bot = lerp(0.95, 0.75, cloud_gray);
-
-        grad = cairo_pattern_create_linear(0, 0, 0, state->height);
-        cairo_pattern_add_color_stop_rgb(grad, 0.0, r_top, g_top, b_top);
-        cairo_pattern_add_color_stop_rgb(grad, 1.0, r_bot, g_bot, b_bot);
-    } else {
-        /* Night: dark blue to very dark */
-        double r_top = lerp(0.02, 0.10, cloud_gray);
-        double g_top = lerp(0.02, 0.08, cloud_gray);
-        double b_top = lerp(0.10, 0.12, cloud_gray);
-
-        double r_bot = lerp(0.05, 0.12, cloud_gray);
-        double g_bot = lerp(0.08, 0.10, cloud_gray);
-        double b_bot = lerp(0.18, 0.15, cloud_gray);
-
-        grad = cairo_pattern_create_linear(0, 0, 0, state->height);
-        cairo_pattern_add_color_stop_rgb(grad, 0.0, r_top, g_top, b_top);
-        cairo_pattern_add_color_stop_rgb(grad, 1.0, r_bot, g_bot, b_bot);
-    }
+    grad = cairo_pattern_create_linear(0, 0, 0, state->height);
+    cairo_pattern_add_color_stop_rgb(grad, 0.00, top[0], top[1], top[2]);
+    cairo_pattern_add_color_stop_rgb(grad, 0.55, mid[0], mid[1], mid[2]);
+    cairo_pattern_add_color_stop_rgb(grad, 1.00, bot[0], bot[1], bot[2]);
 
     cairo_set_source(cr, grad);
     cairo_paint(cr);
     cairo_pattern_destroy(grad);
 }
 
-static void draw_sun(const AnimState *state, cairo_t *cr)
+static void draw_stars(const AnimState *state, cairo_t *cr)
 {
-    if (!state->weather.is_day)
-        return;
-    if (state->weather.type != WEATHER_CLEAR && state->weather.type != WEATHER_PARTLY)
-        return;
+    double cover = state->weather.cloudcover / 100.0;
+    double fade = clampf((-state->sun_alt - 0.02) * 4.0, 0.0, 1.0) *
+	          (1.0 - cover * 0.75);
 
-    double cx = state->width * 0.75;
-    double cy = state->height * 0.2;
-    double scale = (state->height < 500) ? state->height / 480.0 : state->height / 600.0;
-    double radius = 40.0 * scale;
+    if (fade <= 0.01)
+	return;
 
-    /* Rays */
-    cairo_save(cr);
-    cairo_translate(cr, cx, cy);
+    for (int i = 0; i < state->star_count; i++) {
+	const Star *st = &state->stars[i];
+	double tw = 0.65 + 0.35 * sin(state->time_accum * 1.7 + st->twinkle_phase);
+	double a = st->brightness * tw * fade;
+	double r = st->brightness * 1.3;
 
-    int num_rays = 12;
-    for (int i = 0; i < num_rays; i++) {
-        double angle = state->sun_ray_angle + i * (2.0 * M_PI / num_rays);
-        double inner = radius + 5.0 * scale;
-        double outer = radius + 25.0 * scale + sin(state->time_accum * 2.0 + i) * 8.0 * scale;
-
-        cairo_move_to(cr, cos(angle) * inner, sin(angle) * inner);
-        cairo_line_to(cr, cos(angle) * outer, sin(angle) * outer);
+	cairo_set_source_rgba(cr, 1.0, 0.98, 0.92, a);
+	cairo_arc(cr, st->x, st->y, r, 0, 2.0 * M_PI);
+	cairo_fill(cr);
     }
-    cairo_set_source_rgba(cr, 1.0, 0.9, 0.3, 0.8);
-    cairo_set_line_width(cr, 3.0 * scale);
-    cairo_stroke(cr);
+}
+
+/*
+ * Lit limb plus terminator: the right half of the disc, closed by an
+ * ellipse whose x radius follows the phase.  Negative radii flip it to
+ * the gibbous side, and the whole thing mirrors after full moon.
+ */
+static void moon_path(cairo_t *cr, double r, double phase)
+{
+    double a = -cos(2.0 * M_PI * phase);
+
+    if (fabs(a) < 0.03)
+	a = a < 0 ? -0.03 : 0.03;
+
+    cairo_new_path(cr);
+    cairo_arc(cr, 0, 0, r, -M_PI / 2.0, M_PI / 2.0);
+
+    cairo_save(cr);
+    cairo_scale(cr, a, 1.0);
+    cairo_arc(cr, 0, 0, r, M_PI / 2.0, 3.0 * M_PI / 2.0);
     cairo_restore(cr);
 
-    /* Sun disc with radial gradient */
-    cairo_pattern_t *sun_grad = cairo_pattern_create_radial(cx, cy, 0, cx, cy, radius);
-    cairo_pattern_add_color_stop_rgba(sun_grad, 0.0, 1.0, 1.0, 0.6, 1.0);
-    cairo_pattern_add_color_stop_rgba(sun_grad, 0.7, 1.0, 0.85, 0.2, 0.95);
-    cairo_pattern_add_color_stop_rgba(sun_grad, 1.0, 1.0, 0.7, 0.1, 0.15);
+    cairo_close_path(cr);
+}
 
-    cairo_arc(cr, cx, cy, radius, 0, 2.0 * M_PI);
-    cairo_set_source(cr, sun_grad);
+static void draw_moon(const AnimState *state, cairo_t *cr)
+{
+    double cover = state->weather.cloudcover / 100.0;
+    double alpha = state->moon_alpha * (1.0 - cover * 0.85);
+    double scale = state->height / 600.0;
+    double r = 26.0 * scale;
+    cairo_pattern_t *glow;
+
+    if (alpha <= 0.02)
+	return;
+
+    /* Halo */
+    glow = cairo_pattern_create_radial(state->moon_x, state->moon_y, r * 0.6,
+				       state->moon_x, state->moon_y, r * 4.0);
+    cairo_pattern_add_color_stop_rgba(glow, 0.0, 0.85, 0.90, 1.0, 0.18 * alpha);
+    cairo_pattern_add_color_stop_rgba(glow, 1.0, 0.85, 0.90, 1.0, 0.0);
+    cairo_set_source(cr, glow);
+    cairo_arc(cr, state->moon_x, state->moon_y, r * 4.0, 0, 2.0 * M_PI);
     cairo_fill(cr);
-    cairo_pattern_destroy(sun_grad);
+    cairo_pattern_destroy(glow);
+
+    /* Earthshine: the unlit disc, just visible */
+    cairo_set_source_rgba(cr, 0.55, 0.60, 0.72, 0.16 * alpha);
+    cairo_arc(cr, state->moon_x, state->moon_y, r, 0, 2.0 * M_PI);
+    cairo_fill(cr);
+
+    cairo_save(cr);
+    cairo_translate(cr, state->moon_x, state->moon_y);
+    if (state->moon_phase >= 0.5)
+	cairo_scale(cr, -1.0, 1.0);
+    moon_path(cr, r, state->moon_phase);
+    cairo_restore(cr);
+
+    cairo_set_source_rgba(cr, 0.97, 0.97, 0.90, alpha);
+    cairo_fill(cr);
+}
+
+static void draw_sun(const AnimState *state, cairo_t *cr)
+{
+    double cover = state->weather.cloudcover / 100.0;
+    double alpha = state->sun_alpha * (1.0 - cover * 0.80);
+    double high = clampf(state->sun_alt * 3.0, 0.0, 1.0);
+    double scale = state->height / 600.0;
+    double r = lerp(34.0, 28.0, high) * scale;
+    double cx = state->sun_x, cy = state->sun_y;
+    cairo_pattern_t *grad;
+
+    if (alpha <= 0.02)
+	return;
+
+    /* Low sun is deep orange and hazier, high sun is small and white */
+    double cr_ = lerp(1.00, 1.00, high);
+    double cg_ = lerp(0.42, 0.96, high);
+    double cb_ = lerp(0.12, 0.80, high);
+    double halo = lerp(5.5, 3.0, high);
+
+    grad = cairo_pattern_create_radial(cx, cy, r * 0.5, cx, cy, r * halo);
+    cairo_pattern_add_color_stop_rgba(grad, 0.0, cr_, cg_, cb_, 0.38 * alpha);
+    cairo_pattern_add_color_stop_rgba(grad, 0.4, cr_, cg_, cb_, 0.12 * alpha);
+    cairo_pattern_add_color_stop_rgba(grad, 1.0, cr_, cg_, cb_, 0.0);
+    cairo_set_source(cr, grad);
+    cairo_arc(cr, cx, cy, r * halo, 0, 2.0 * M_PI);
+    cairo_fill(cr);
+    cairo_pattern_destroy(grad);
+
+    /* Disc, brightest in the middle */
+    grad = cairo_pattern_create_radial(cx, cy, 0, cx, cy, r);
+    cairo_pattern_add_color_stop_rgba(grad, 0.0, 1.0, lerp(0.80, 1.0, high),
+				      lerp(0.55, 0.92, high), alpha);
+    cairo_pattern_add_color_stop_rgba(grad, 0.75, cr_, cg_, cb_, alpha);
+    cairo_pattern_add_color_stop_rgba(grad, 1.0, cr_, cg_ * 0.85, cb_ * 0.7,
+				      alpha * 0.85);
+    cairo_set_source(cr, grad);
+    cairo_arc(cr, cx, cy, r, 0, 2.0 * M_PI);
+    cairo_fill(cr);
+    cairo_pattern_destroy(grad);
 }
 
 static void draw_clouds(const AnimState *state, cairo_t *cr)
@@ -336,6 +528,8 @@ static void draw_streaks(const AnimState *state, cairo_t *cr)
 void anim_draw(const AnimState *state, cairo_t *cr)
 {
     draw_sky(state, cr);
+    draw_stars(state, cr);
+    draw_moon(state, cr);
     draw_sun(state, cr);
     draw_clouds(state, cr);
     draw_streaks(state, cr);

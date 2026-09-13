@@ -8,6 +8,7 @@
 #define ANIM_MAX_CLOUDS    20
 #define ANIM_MAX_PARTICLES 300
 #define ANIM_MAX_STREAKS   15
+#define ANIM_MAX_STARS     160
 
 typedef struct {
     double x, y;
@@ -24,8 +25,23 @@ typedef struct {
 } Particle;
 
 typedef struct {
-    /* Sun */
-    double sun_ray_angle;
+    double x, y;
+    double brightness;
+    double twinkle_phase;
+} Star;
+
+typedef struct {
+    /* Sky, recomputed every update from the time of day */
+    double sun_alt;        /* -1 midnight, 0 horizon, +1 zenith */
+    double sun_x, sun_y;
+    double sun_alpha;
+    double moon_x, moon_y;
+    double moon_alpha;
+    double moon_phase;     /* 0.0 new, 0.25 first quarter, 0.5 full */
+    double horizon;        /* y of the horizon line, in pixels */
+
+    Star   stars[ANIM_MAX_STARS];
+    int    star_count;
 
     /* Clouds */
     Cloud  clouds[ANIM_MAX_CLOUDS];
