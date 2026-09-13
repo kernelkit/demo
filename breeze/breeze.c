@@ -62,9 +62,13 @@ typedef struct {
     guint       clock_timer;
     guint       weather_timer;
     guint       webview_timeout;
+    guint       load_timeout;
 } AppContext;
 
 static AppContext app;
+
+/* Seconds to wait for a web page to load before giving up */
+#define LOAD_TIMEOUT 20
 
 /* ------------------------------------------------------------------ */
 /* CSS styling                                                        */
@@ -240,9 +244,44 @@ static gboolean on_webview_timeout(gpointer data);
 static void load_next_url(void);
 static void carousel_restart(void);
 
+static void cancel_load(void)
+{
+    if (app.load_timeout) {
+        g_source_remove(app.load_timeout);
+        app.load_timeout = 0;
+    }
+
+    if (app.web_loading) {
+        webkit_web_view_stop_loading(WEBKIT_WEB_VIEW(app.web_view));
+        app.web_loading = FALSE;
+    }
+
+    gtk_widget_hide(app.loading_label);
+}
+
+/* A page that never finishes loading must not strand the display on
+ * "Loading ..." -- give up and let the carousel try the next one. */
+static gboolean on_load_timeout(gpointer data)
+{
+    (void)data;
+
+    app.load_timeout = 0;
+    cancel_load();
+
+    if (app.carousel_weather)
+        carousel_restart();
+
+    return G_SOURCE_REMOVE;
+}
+
 static void show_web_view(void)
 {
     int timeout;
+
+    if (app.load_timeout) {
+        g_source_remove(app.load_timeout);
+        app.load_timeout = 0;
+    }
 
     gtk_widget_hide(app.loading_label);
     app.web_loading = FALSE;
@@ -328,6 +367,8 @@ static void load_next_url(void)
     app.web_loading = TRUE;
     gtk_widget_show(app.loading_label);
     webkit_web_view_load_uri(WEBKIT_WEB_VIEW(app.web_view), url);
+    app.load_timeout = g_timeout_add_seconds(LOAD_TIMEOUT,
+                                             on_load_timeout, NULL);
 }
 
 static void toggle_web_view(void)
@@ -352,9 +393,7 @@ static void toggle_web_view(void)
 
     if (app.web_loading) {
         /* Already loading -- cancel */
-        webkit_web_view_stop_loading(WEBKIT_WEB_VIEW(app.web_view));
-        gtk_widget_hide(app.loading_label);
-        app.web_loading = FALSE;
+        cancel_load();
 
         if (app.carousel_weather)
             carousel_restart();
