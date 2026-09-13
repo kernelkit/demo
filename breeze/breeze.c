@@ -261,15 +261,22 @@ static gboolean on_clock_tick(gpointer data)
 	(void)data;
 	update_clock_label();
 
-	/* Slow circular drift of text overlay to prevent screen burn-in.
-	 * Full cycle ~5 minutes, radius ~15 pixels -- barely noticeable.
-	 * Use opposing margins so the total stays constant and GTK
-	 * never sees a negative value or an out-of-bounds allocation. */
+	/*
+	 * Wander the text overlay slowly to spread screen burn-in.  The
+	 * two axes run at unrelated rates, so the path fills an area
+	 * rather than retracing one ring, and crosses the true centre
+	 * regularly -- a circle of fixed radius is never centred at all.
+	 * Slow enough that it is not seen moving: a whole hour to cross.
+	 * Opposing margins keep the total constant, so GTK never sees a
+	 * negative value or an out-of-bounds allocation.
+	 */
+	double radius = app.anim.height * 0.025; /* pixels, scaled to the display */
+	double a = app.drift_time * 2.0 * M_PI / 3600.0;
+	int dx, dy;
+
 	app.drift_time += 1.0;
-	double period = 300.0; /* seconds per full circle */
-	double radius = 15.0;  /* pixels */
-	int dx = (int)(sin(app.drift_time * 2.0 * M_PI / period) * radius);
-	int dy = (int)(cos(app.drift_time * 2.0 * M_PI / period) * radius);
+	dx = (int)(sin(a) * radius);
+	dy = (int)(sin(a * 1.618) * radius); /* golden ratio: never repeats */
 
 	gtk_widget_set_margin_start(app.overlay_vbox, (int)radius + dx);
 	gtk_widget_set_margin_end(app.overlay_vbox, (int)radius - dx);
