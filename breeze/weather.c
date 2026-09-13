@@ -140,15 +140,14 @@ const char *weather_wind_compass(double degrees)
 const char *weather_wind_arrow(double degrees)
 {
     /*
-     * Wind direction is where wind comes FROM.
-     * Arrow should point the direction wind is BLOWING TO,
-     * so rotate 180 degrees.
+     * Wind direction is where the wind comes FROM, and the table below
+     * is indexed by that, each entry already pointing the way the wind
+     * blows.  No rotation to do here.
      */
-    double to = degrees + 180.0;
+    while (degrees < 0) degrees += 360;
+    while (degrees >= 360) degrees -= 360;
 
-    while (to >= 360) to -= 360;
-
-    /* 8 Unicode arrows, starting from N (up) going clockwise */
+    /* 8 Unicode arrows, by the direction the wind comes from */
     static const char *arrows[] = {
         "\u2193",  /*   0 / N  -> blows south -> down arrow */
         "\u2199",  /*  45 / NE -> blows SW */
@@ -159,7 +158,7 @@ const char *weather_wind_arrow(double degrees)
         "\u2192",  /* 270 / W  -> blows east -> right arrow */
         "\u2198",  /* 315 / NW -> blows SE */
     };
-    int idx = (int)((to + 22.5) / 45.0) % 8;
+    int idx = (int)((degrees + 22.5) / 45.0) % 8;
 
     return arrows[idx];
 }
