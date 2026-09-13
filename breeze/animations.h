@@ -61,6 +61,13 @@ typedef struct {
     Star   stars[ANIM_MAX_STARS];
     int    star_count;
 
+    /* Shooting star: meteor_t counts 0..1 across one streak */
+    double meteor_t;
+    double next_meteor;
+    double meteor_x, meteor_y;
+    double meteor_dx, meteor_dy;
+    double meteor_len;
+
     /* Clouds */
     Cloud  clouds[ANIM_MAX_CLOUDS];
     int    cloud_count;

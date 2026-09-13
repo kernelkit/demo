@@ -98,6 +98,49 @@ static double moon_phase(time_t now)
     return phase < 0 ? phase + 1.0 : phase;
 }
 
+/* How plainly the stars are showing: nothing happens in a bright or
+ * clouded sky, and the meteors keep to the same rule */
+static double star_fade(const AnimState *state)
+{
+    double cover = state->weather.cloudcover / 100.0;
+
+    return clampf((-state->sun_alt - 0.02) * 4.0, 0.0, 1.0) *
+	   (1.0 - cover * 0.75);
+}
+
+static void update_meteor(AnimState *state, double dt)
+{
+    if (star_fade(state) < 0.35) {
+	state->meteor_t = 0.0;
+	state->next_meteor = 10.0 + randf() * 25.0;
+	return;
+    }
+
+    if (state->meteor_t > 0.0) {
+	state->meteor_t += dt / 0.85;
+	if (state->meteor_t >= 1.0)
+	    state->meteor_t = 0.0;
+	return;
+    }
+
+    state->next_meteor -= dt;
+    if (state->next_meteor > 0.0)
+	return;
+
+    /* Off at a shallow angle, either way across the sky */
+    double ang = (22.0 + randf() * 30.0) * M_PI / 180.0;
+    double dir = randf() < 0.5 ? 1.0 : -1.0;
+
+    state->meteor_x = state->width * (dir > 0 ? randf() * 0.45
+					      : 0.55 + randf() * 0.45);
+    state->meteor_y = state->height * randf() * 0.28;
+    state->meteor_dx = cos(ang) * dir;
+    state->meteor_dy = sin(ang);
+    state->meteor_len = state->width * (0.22 + randf() * 0.26);
+    state->meteor_t = 0.0001;
+    state->next_meteor = 14.0 + randf() * 40.0;
+}
+
 static void update_sky(AnimState *state)
 {
     time_t now = time(NULL);
@@ -419,6 +462,7 @@ void anim_update(AnimState *state, double dt, const WeatherData *weather)
     state->time_accum += dt;
 
     update_sky(state);
+    update_meteor(state, dt);
     update_wind(state);
     update_clouds(state, dt);
     update_particles(state, dt);
@@ -452,9 +496,7 @@ static void draw_sky(const AnimState *state, cairo_t *cr)
 
 static void draw_stars(const AnimState *state, cairo_t *cr)
 {
-    double cover = state->weather.cloudcover / 100.0;
-    double fade = clampf((-state->sun_alt - 0.02) * 4.0, 0.0, 1.0) *
-	          (1.0 - cover * 0.75);
+    double fade = star_fade(state);
 
     if (fade <= 0.01)
 	return;
@@ -469,6 +511,38 @@ static void draw_stars(const AnimState *state, cairo_t *cr)
 	cairo_arc(cr, st->x, st->y, r, 0, 2.0 * M_PI);
 	cairo_fill(cr);
     }
+}
+
+static void draw_meteor(const AnimState *state, cairo_t *cr)
+{
+    double p = state->meteor_t;
+    double travel, tail, hx, hy, tx, ty, a;
+    cairo_pattern_t *g;
+
+    if (p <= 0.0)
+	return;
+
+    travel = state->meteor_len * p;
+    tail = travel < state->meteor_len * 0.38 ? travel : state->meteor_len * 0.38;
+    hx = state->meteor_x + state->meteor_dx * travel;
+    hy = state->meteor_y + state->meteor_dy * travel;
+    tx = hx - state->meteor_dx * tail;
+    ty = hy - state->meteor_dy * tail;
+    a = sin(M_PI * p) * star_fade(state);
+
+    g = cairo_pattern_create_linear(tx, ty, hx, hy);
+    cairo_pattern_add_color_stop_rgba(g, 0.0, 0.75, 0.85, 1.0, 0.0);
+    cairo_pattern_add_color_stop_rgba(g, 1.0, 1.0, 0.98, 0.92, a);
+    cairo_set_source(cr, g);
+    cairo_set_line_width(cr, 2.0);
+    cairo_move_to(cr, tx, ty);
+    cairo_line_to(cr, hx, hy);
+    cairo_stroke(cr);
+    cairo_pattern_destroy(g);
+
+    cairo_set_source_rgba(cr, 1.0, 1.0, 0.95, a);
+    cairo_arc(cr, hx, hy, 1.6, 0, 2.0 * M_PI);
+    cairo_fill(cr);
 }
 
 /*
@@ -915,6 +989,7 @@ void anim_draw(const AnimState *state, cairo_t *cr)
 {
     draw_sky(state, cr);
     draw_stars(state, cr);
+    draw_meteor(state, cr);
     draw_moon(state, cr);
     draw_sun(state, cr);
     draw_clouds(state, cr);
