@@ -19,9 +19,21 @@ cleanup()
 
 trap cleanup TERM INT
 
+rotate()
+{
+    [ -n "$DISPLAY_ROTATE" ] || return 0
+
+    echo "Applying display rotation: $DISPLAY_ROTATE"
+    OUTPUT=$(xrandr | grep " connected" | head -1 | cut -d' ' -f1)
+    [ -n "$OUTPUT" ] || return 0
+    xrandr --output "$OUTPUT" --rotate "$DISPLAY_ROTATE"
+}
+
 # Check if X server is already available
 if xdpyinfo -display "${DISPLAY:-:0}" >/dev/null 2>&1; then
+    export DISPLAY="${DISPLAY:-:0}"
     echo "Using existing X server on $DISPLAY"
+    rotate
     exec dbus-launch ./breeze "$@"
 else
     echo "No X server found, starting embedded X server..."
@@ -30,15 +42,11 @@ else
     XPID=$!
     sleep 2
 
-    # Apply display rotation if requested
-    if [ -n "$DISPLAY_ROTATE" ]; then
-        echo "Applying display rotation: $DISPLAY_ROTATE"
-        OUTPUT=$(DISPLAY=:0 xrandr | grep " connected" | head -1 | cut -d' ' -f1)
-        DISPLAY=:0 xrandr --output "$OUTPUT" --rotate "$DISPLAY_ROTATE"
-    fi
+    export DISPLAY=:0
+    rotate
 
     # WebKitGTK requires a D-Bus session bus
-    DISPLAY=:0 dbus-launch ./breeze "$@" &
+    dbus-launch ./breeze "$@" &
     APPPID=$!
 
     wait $APPPID
