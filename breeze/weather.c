@@ -128,7 +128,8 @@ WeatherData weather_fetch(double latitude, double longitude)
 	         "https://api.open-meteo.com/v1/forecast?"
 	         "latitude=%.4f&longitude=%.4f"
 	         "&current_weather=true"
-	         "&hourly=cloudcover,precipitation,relative_humidity_2m",
+	         "&hourly=cloudcover,precipitation,relative_humidity_2m,"
+	         "temperature_2m,weathercode,precipitation_probability",
 	         latitude, longitude);
 
 	session = soup_session_new();
@@ -222,6 +223,60 @@ WeatherData weather_fetch(double latitude, double longitude)
 			cJSON *rh = cJSON_GetArrayItem(rh_arr, current_hour);
 			if (rh)
 				data.humidity = rh->valueint;
+		}
+	}
+
+	/*
+	 * The hours ahead.  The array is indexed in UTC like the rest, but
+	 * each hour wants a local label, so go through time_t rather than
+	 * adding an offset by hand -- that is the only way a half hour zone,
+	 * or the hour a clock change eats, comes out right.
+	 */
+	if (hourly) {
+		cJSON *t_arr = cJSON_GetObjectItem(hourly, "temperature_2m");
+		cJSON *c_arr = cJSON_GetObjectItem(hourly, "weathercode");
+		cJSON *p_arr = cJSON_GetObjectItem(hourly, "precipitation");
+		cJSON *pp_arr = cJSON_GetObjectItem(hourly, "precipitation_probability");
+		cJSON *cc_arr = cJSON_GetObjectItem(hourly, "cloudcover");
+		struct tm midnight = tm_utc;
+		time_t base;
+
+		midnight.tm_hour = 0;
+		midnight.tm_min = 0;
+		midnight.tm_sec = 0;
+		base = timegm(&midnight);
+
+		for (int i = 0; i < WEATHER_FORECAST_HOURS; i++) {
+			int idx = current_hour + 1 + i;
+			ForecastHour *f = &data.forecast[data.forecast_count];
+			struct tm local;
+			time_t when;
+			cJSON *v;
+
+			if (!t_arr || cJSON_GetArraySize(t_arr) <= idx)
+				break;
+
+			when = base + (time_t)idx * 3600;
+			localtime_r(&when, &local);
+			f->hour = local.tm_hour;
+			f->minute = local.tm_min;
+
+			v = cJSON_GetArrayItem(t_arr, idx);
+			f->temperature = v ? v->valuedouble : 0.0;
+
+			v = c_arr ? cJSON_GetArrayItem(c_arr, idx) : NULL;
+			f->type = v ? wmo_to_type(v->valueint, &f->intensity) : WEATHER_CLEAR;
+
+			v = p_arr ? cJSON_GetArrayItem(p_arr, idx) : NULL;
+			f->precipitation = v ? v->valuedouble : 0.0;
+
+			v = pp_arr ? cJSON_GetArrayItem(pp_arr, idx) : NULL;
+			f->precip_prob = v ? v->valueint : 0;
+
+			v = cc_arr ? cJSON_GetArrayItem(cc_arr, idx) : NULL;
+			f->cloudcover = v ? v->valueint : 0;
+
+			data.forecast_count++;
 		}
 	}
 

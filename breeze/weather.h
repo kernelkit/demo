@@ -15,6 +15,19 @@ typedef enum {
 	WEATHER_THUNDERSTORM
 } WeatherType;
 
+#define WEATHER_FORECAST_HOURS 12
+
+typedef struct {
+	int hour;             /* local hour of day, 0-23 */
+	int minute;           /* local minute, for the odd half-hour zone */
+	double temperature;   /* Celsius */
+	double precipitation; /* mm */
+	int precip_prob;      /* 0 - 100 percent */
+	int cloudcover;       /* 0 - 100 percent */
+	WeatherType type;
+	double intensity; /* 0.0 - 1.0 */
+} ForecastHour;
+
 typedef struct {
 	double temperature;   /* Celsius */
 	double windspeed;     /* km/h */
@@ -28,6 +41,10 @@ typedef struct {
 	double sunrise; /* hours (e.g. 6.5 = 06:30) */
 	double sunset;  /* hours */
 	bool valid;
+
+	/* The hours ahead, starting with the next one */
+	ForecastHour forecast[WEATHER_FORECAST_HOURS];
+	int forecast_count;
 } WeatherData;
 
 /*
