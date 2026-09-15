@@ -44,5 +44,6 @@ COPY start.sh /app/start.sh
 
 ENV DISPLAY=:0
 ENV FULLSCREEN=1
+ENV FORECAST=1
 
 CMD ["/app/start.sh"]

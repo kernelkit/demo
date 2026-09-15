@@ -29,7 +29,7 @@ services:
       - CAROUSEL_WEATHER=${CAROUSEL_WEATHER:-}
       - CAROUSEL_FORECAST=${CAROUSEL_FORECAST:-}
       - CAROUSEL_URL=${CAROUSEL_URL:-}
-      - FORECAST=${FORECAST:-}
+      - FORECAST=${FORECAST:-1}
       - URL_SCRIPT=${URL_SCRIPT:-}
       - ZOOM=${ZOOM:-}
     volumes:
