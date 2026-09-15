@@ -13,8 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /build
 
-COPY breeze.c weather.c weather.h animations.c animations.h \
-     sunriset.c sunriset.h Makefile ./
+COPY . .
 
 RUN make
 

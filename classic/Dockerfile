@@ -13,7 +13,7 @@ RUN apk add --no-cache \
 
 WORKDIR /build
 
-COPY demo.c Makefile topaz-8.otf *.png music.mod* ./
+COPY . .
 
 RUN make
 

@@ -5,14 +5,19 @@ CFLAGS     = $(gtk_CFLAGS) -DSUNRISET_LIB -Wall -O2
 LDLIBS     = $(gtk_LIBS) -lm
 
 TARGET     = breeze
-SOURCES    = breeze.c weather.c animations.c forecast.c sunriset.c
+
+# Derived, so that adding a source file is not three edits and a broken
+# container build a week later
+SOURCES    = $(wildcard *.c)
+HEADERS    = $(wildcard *.h)
 
 # sunriset.[ch] is vendored, it stays in its upstream formatting
-FMT_FILES  = breeze.c weather.c animations.c forecast.c weather.h animations.h forecast.h
+VENDORED   = sunriset.c sunriset.h
+FMT_FILES  = $(filter-out $(VENDORED),$(SOURCES) $(HEADERS))
 
 all: $(TARGET)
 
-$(TARGET): $(SOURCES) weather.h animations.h forecast.h sunriset.h
+$(TARGET): $(SOURCES) $(HEADERS)
 	$(CC) $(CFLAGS) -o $(TARGET) $(SOURCES) $(LDLIBS)
 
 run: $(TARGET)

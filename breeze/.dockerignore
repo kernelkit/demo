@@ -1,0 +1,9 @@
+# The image builds its own binary.  A host build copied in is at best
+# wasted, at worst the wrong architecture sitting there looking newer
+# than the sources, so make leaves it alone.
+breeze
+
+# No part of the build
+screenshots/
+README.md
+.gitignore

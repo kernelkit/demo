@@ -1,0 +1,11 @@
+# Built here, not copied in -- see breeze/.dockerignore
+demo
+*_data.h
+AppDir/
+appimagetool
+*.AppImage
+
+# No part of the build
+demo-screenshot.png
+README.md
+.gitignore
