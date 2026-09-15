@@ -24,9 +24,10 @@ static void rounded_box(cairo_t *cr, double x, double y, double w, double h, dou
 	cairo_close_path(cr);
 }
 
-/* Pango rather than cairo's toy text, to match the rest of the display */
-static void text_at(cairo_t *cr, double cx, double y, const char *str, double size, gboolean bold,
-                    double alpha)
+/* Pango rather than cairo's toy text, to match the rest of the display.
+ * Centred on cx, or left aligned at it when centre is FALSE. */
+static void text_aligned(cairo_t *cr, double cx, double y, const char *str, double size, gboolean bold,
+                         double alpha, gboolean centre)
 {
 	PangoLayout *layout = pango_cairo_create_layout(cr);
 	PangoFontDescription *desc;
@@ -42,9 +43,15 @@ static void text_at(cairo_t *cr, double cx, double y, const char *str, double si
 	pango_layout_get_pixel_size(layout, &w, &h);
 
 	cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, alpha);
-	cairo_move_to(cr, cx - w / 2.0, y);
+	cairo_move_to(cr, centre ? cx - w / 2.0 : cx, y);
 	pango_cairo_show_layout(cr, layout);
 	g_object_unref(layout);
+}
+
+static void text_at(cairo_t *cr, double cx, double y, const char *str, double size, gboolean bold,
+                    double alpha)
+{
+	text_aligned(cr, cx, y, str, size, bold, alpha, TRUE);
 }
 
 /*
@@ -117,14 +124,14 @@ static void draw_glyph(cairo_t *cr, double cx, double cy, double s, WeatherType 
 	}
 }
 
-void forecast_draw(const WeatherData *weather, cairo_t *cr, int width, int height)
+void forecast_draw(const WeatherData *weather, const char *place, cairo_t *cr, int width, int height)
 {
 	double m = width * PANEL_MARGIN;
 	double x = m, w = width - 2 * m;
 	double y = height * 0.16, h = height * 0.68;
 	double slot = w / (weather->forecast_count ? weather->forecast_count : 1);
 	double lo = 1e9, hi = -1e9;
-	double curve_top = y + h * 0.42, curve_bot = y + h * 0.64;
+	double curve_top = y + h * 0.38, curve_bot = y + h * 0.66;
 	double bar_base = y + h * 0.90;
 	double scale = height / 600.0;
 	int n = weather->forecast_count;
@@ -139,7 +146,11 @@ void forecast_draw(const WeatherData *weather, cairo_t *cr, int width, int heigh
 	cairo_set_source_rgba(cr, 0.06, 0.08, 0.14, 0.52);
 	cairo_fill(cr);
 
-	text_at(cr, width / 2.0, y + h * 0.02, "Next 12 hours", 19 * scale, TRUE, 0.80);
+	/* No "Next 12 hours" heading: twelve hours and a temperature curve
+	 * say that for themselves.  The place takes the line instead, at
+	 * two thirds the size, so the chart still gains by the trade. */
+	if (place && place[0])
+		text_at(cr, width / 2.0, y + h * 0.025, place, 15 * scale, FALSE, 0.60);
 
 	for (int i = 0; i < n; i++) {
 		double t = weather->forecast[i].temperature;
@@ -205,9 +216,9 @@ void forecast_draw(const WeatherData *weather, cairo_t *cr, int width, int heigh
 		 * read as one another.
 		 */
 		snprintf(buf, sizeof(buf), "%02d", f->hour);
-		text_at(cr, cx, y + h * 0.12, buf, 16 * scale, FALSE, 0.85);
+		text_at(cr, cx, y + h * 0.10, buf, 16 * scale, FALSE, 0.85);
 
-		draw_glyph(cr, cx, y + h * 0.26, 22 * scale, f->type, night);
+		draw_glyph(cr, cx, y + h * 0.22, 22 * scale, f->type, night);
 
 		/* Nothing else lives down here now, so a number can only be mm */
 		if (f->precipitation >= 0.05) {

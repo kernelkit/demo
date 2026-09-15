@@ -309,7 +309,19 @@ WeatherData weather_fetch(double latitude, double longitude)
 	return data;
 }
 
-bool weather_geocode(const char *location, double *latitude, double *longitude)
+/* The place's own spelling of itself, which is what belongs on screen */
+static void place_name(cJSON *item, char *name, size_t len)
+{
+	cJSON *n = cJSON_GetObjectItem(item, "name");
+
+	if (!name || !len)
+		return;
+
+	if (n && n->valuestring)
+		snprintf(name, len, "%s", n->valuestring);
+}
+
+bool weather_geocode(const char *location, double *latitude, double *longitude, char *name, size_t len)
 {
 	SoupSession *session;
 	SoupMessage *msg;
@@ -398,6 +410,7 @@ bool weather_geocode(const char *location, double *latitude, double *longitude)
 			if (lat && lon) {
 				*latitude = lat->valuedouble;
 				*longitude = lon->valuedouble;
+				place_name(item, name, len);
 				found = true;
 			}
 		}
@@ -410,6 +423,7 @@ bool weather_geocode(const char *location, double *latitude, double *longitude)
 			if (lat && lon) {
 				*latitude = lat->valuedouble;
 				*longitude = lon->valuedouble;
+				place_name(item, name, len);
 				found = true;
 			}
 		}

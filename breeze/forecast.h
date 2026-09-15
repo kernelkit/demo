@@ -8,6 +8,6 @@
  * Draw the hours ahead over whatever is already on the context, which
  * is the same animated sky the current conditions sit on.
  */
-void forecast_draw(const WeatherData *weather, cairo_t *cr, int width, int height);
+void forecast_draw(const WeatherData *weather, const char *place, cairo_t *cr, int width, int height);
 
 #endif /* FORECAST_H */

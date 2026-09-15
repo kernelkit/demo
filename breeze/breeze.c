@@ -31,6 +31,7 @@ typedef struct {
 	GtkWidget *stack;
 	GtkWidget *drawing_area;
 	GtkWidget *forecast_area;
+	GtkWidget *header_label;
 	GtkWidget *time_label;
 	GtkWidget *temp_label;
 	GtkWidget *desc_label;
@@ -52,6 +53,10 @@ typedef struct {
 	char **web_urls;
 	int url_count;
 	int current_url;
+
+	/* Where we are, as the place spells it, and how to write the date */
+	char place[64];
+	const char *date_format;
 
 	/* Second screen: the hours ahead */
 	gboolean forecast;
@@ -99,6 +104,13 @@ static const char *css_style = "label.overlay-time,"
                                "label.overlay-desc,"
                                "label.overlay-detail {"
                                "  font-family: \"Open Sans\", \"DejaVu Sans\", sans-serif;"
+                               "}"
+                               "label.overlay-header {"
+                               "  color: rgba(255,255,255,0.80);"
+                               "  font-size: 26px;"
+                               "  font-weight: 300;"
+                               "  letter-spacing: 2px;"
+                               "  text-shadow: 0 2px 8px rgba(0,0,0,0.55);"
                                "}"
                                "label.overlay-time {"
                                "  color: white;"
@@ -154,11 +166,24 @@ static void apply_css(void)
 static void update_clock_label(void)
 {
 	time_t now = time(NULL);
-	struct tm *tm = localtime(&now);
-	char buf[16];
+	struct tm tm;
+	char buf[16], date[64], header[128];
 
-	snprintf(buf, sizeof(buf), "%02d:%02d", tm->tm_hour, tm->tm_min);
+	localtime_r(&now, &tm);
+	snprintf(buf, sizeof(buf), "%02d:%02d", tm.tm_hour, tm.tm_min);
 	gtk_label_set_text(GTK_LABEL(app.time_label), buf);
+
+	date[0] = '\0';
+	if (app.date_format && app.date_format[0])
+		strftime(date, sizeof(date), app.date_format, &tm);
+
+	/* Where and when, on one quiet line above the clock */
+	if (app.place[0] && date[0])
+		snprintf(header, sizeof(header), "%s   \u00B7   %s", app.place, date);
+	else
+		snprintf(header, sizeof(header), "%s%s", app.place, date);
+
+	gtk_label_set_text(GTK_LABEL(app.header_label), header);
 }
 
 /*
@@ -187,7 +212,11 @@ static void apply_demo_weather(void)
 	if (app.demo_weather < 0)
 		return;
 
-	app.weather.valid = true;
+	/*
+	 * Paint the condition over whatever was fetched, but do not call
+	 * a failed fetch valid: that put a zero temperature and a sunrise
+	 * of 00:00 on screen as though they were real.
+	 */
 	app.weather.type = (WeatherType)app.demo_weather;
 	app.weather.cloudcover = app.demo_cover;
 	app.weather.intensity = 0.8;
@@ -244,7 +273,7 @@ static gboolean on_draw_forecast(GtkWidget *widget, cairo_t *cr, gpointer data)
 	(void)data;
 
 	anim_draw(&app.anim, cr);
-	forecast_draw(&app.weather, cr, app.anim.width, app.anim.height);
+	forecast_draw(&app.weather, app.place, cr, app.anim.width, app.anim.height);
 	return FALSE;
 }
 
@@ -601,6 +630,10 @@ static GtkWidget *create_weather_view(void)
 
 	/* Overlay labels, in three tiers: the clock, then the conditions,
 	 * then everything secondary on one quiet line */
+	app.header_label = gtk_label_new("");
+	gtk_widget_set_halign(app.header_label, GTK_ALIGN_CENTER);
+	gtk_style_context_add_class(gtk_widget_get_style_context(app.header_label), "overlay-header");
+
 	app.time_label = gtk_label_new("--:--");
 	gtk_widget_set_halign(app.time_label, GTK_ALIGN_CENTER);
 	gtk_style_context_add_class(gtk_widget_get_style_context(app.time_label), "overlay-time");
@@ -629,6 +662,7 @@ static GtkWidget *create_weather_view(void)
 	gtk_widget_set_halign(vbox, GTK_ALIGN_CENTER);
 	gtk_widget_set_valign(vbox, GTK_ALIGN_CENTER);
 	app.overlay_vbox = vbox;
+	gtk_box_pack_start(GTK_BOX(vbox), app.header_label, FALSE, FALSE, 0);
 	gtk_box_pack_start(GTK_BOX(vbox), app.time_label, FALSE, FALSE, 0);
 	gtk_box_pack_start(GTK_BOX(vbox), conditions, FALSE, FALSE, 6);
 	gtk_box_pack_start(GTK_BOX(vbox), app.detail_label, FALSE, FALSE, 22);
@@ -690,6 +724,8 @@ static void usage(const char *name)
 	       "      --url URL                 Web page URL (repeatable for carousel)\n"
 	       "      --carousel-weather SECS   Weather display time in carousel mode (default: 10)\n"
 	       "      --carousel-url SECS       URL display time in carousel mode (default: 30)\n"
+	       "      --date-format FMT         iso, long, short, us, dmy, none, or any\n"
+	       "                                strftime format (default: iso)\n"
 	       "      --forecast                Second screen with the next 12 hours\n"
 	       "      --carousel-forecast SECS  Forecast display time (default: as weather)\n"
 	       "      --url-script JS|FILE      JavaScript to run over each page once it\n"
@@ -708,6 +744,7 @@ static void usage(const char *name)
 	       "  WEB_URL                       Comma-separated list of URLs\n"
 	       "  CAROUSEL_WEATHER              Same as --carousel-weather\n"
 	       "  CAROUSEL_URL                  Same as --carousel-url\n"
+	       "  DATE_FORMAT                   Same as --date-format\n"
 	       "  FORECAST                      Second screen: 1, true, yes, or on\n"
 	       "  CAROUSEL_FORECAST             Same as --carousel-forecast\n"
 	       "  URL_SCRIPT                    Same as --url-script\n"
@@ -763,6 +800,33 @@ static double parse_zoom(const char *arg)
 	}
 
 	return z;
+}
+
+static const struct {
+	const char *name;
+	const char *fmt;
+} date_formats[] = {
+	{ "iso",   "%Y-%m-%d"   }, /* 2026-09-15 */
+	{ "long",  "%A %-d %B"  }, /* Tuesday 15 September */
+	{ "short", "%a %-d %b"  }, /* Tue 15 Sep */
+	{ "us",    "%m/%d/%Y"   }, /* 09/15/2026 */
+	{ "dmy",   "%-d/%-m/%Y" }, /* 15/9/2026 */
+	{ "none",  ""           }, /* no date at all */
+};
+
+/* A name from the table, or anything with a % in it taken as strftime */
+static const char *parse_date_format(const char *arg)
+{
+	if (strchr(arg, '%'))
+		return arg;
+
+	for (size_t i = 0; i < sizeof(date_formats) / sizeof(date_formats[0]); i++) {
+		if (g_ascii_strcasecmp(arg, date_formats[i].name) == 0)
+			return date_formats[i].fmt;
+	}
+
+	fprintf(stderr, "Unknown date format \"%s\"\n", arg);
+	exit(1);
 }
 
 static int parse_weather(const char *name)
@@ -843,6 +907,11 @@ static void parse_args(int argc, char *argv[])
 	app.fullscreen = env_bool("FULLSCREEN");
 	app.forecast = env_bool("FORECAST");
 
+	app.date_format = date_formats[0].fmt; /* iso */
+	env = env_str("DATE_FORMAT");
+	if (env)
+		app.date_format = parse_date_format(env);
+
 	env = env_str("URL_SCRIPT");
 	if (env)
 		app.url_script = load_script(env);
@@ -858,6 +927,7 @@ static void parse_args(int argc, char *argv[])
 
 	static const struct option long_opts[] = {
 		{ "carousel-forecast", required_argument, NULL, 'G' },
+		{ "date-format",       required_argument, NULL, 'd' },
 		{ "carousel-url",      required_argument, NULL, 'c' },
 		{ "carousel-weather",  required_argument, NULL, 'C' },
 		{ "forecast",          no_argument,       NULL, 'F' },
@@ -885,6 +955,7 @@ static void parse_args(int argc, char *argv[])
 			app.carousel_weather = atoi(optarg);
 			carousel_set = TRUE;
 			break;
+		case 'd': app.date_format = parse_date_format(optarg); break;
 		case 'F': app.forecast = TRUE; break;
 		case 'G':
 			app.carousel_forecast = atoi(optarg);
@@ -924,7 +995,7 @@ static void parse_args(int argc, char *argv[])
 	if (location) {
 		double lat, lon;
 
-		if (weather_geocode(location, &lat, &lon)) {
+		if (weather_geocode(location, &lat, &lon, app.place, sizeof(app.place))) {
 			app.latitude = lat;
 			app.longitude = lon;
 			fprintf(stderr, "Location \"%s\" -> %.4f, %.4f\n", location, lat, lon);

@@ -2,6 +2,7 @@
 #define WEATHER_H
 
 #include <stdbool.h>
+#include <stddef.h>
 
 typedef enum {
 	WEATHER_CLEAR,
@@ -68,8 +69,10 @@ const char *weather_wind_arrow(double degrees);
 /*
  * Geocode a location string to lat/lon using Open-Meteo's geocoding API.
  * Accepts "City" or "Country,City" (e.g., "Stockholm" or "Sweden,Stockholm").
- * Returns true on success and fills in *latitude and *longitude.
+ * Returns true on success and fills in *latitude and *longitude, and the
+ * place's own name into name, which is what a display should show:
+ * "Sweden,Stockholm" comes back as "Stockholm".
  */
-bool weather_geocode(const char *location, double *latitude, double *longitude);
+bool weather_geocode(const char *location, double *latitude, double *longitude, char *name, size_t len);
 
 #endif /* WEATHER_H */

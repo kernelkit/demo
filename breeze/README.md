@@ -88,6 +88,8 @@ Options:
       --url URL                 Web page URL (repeatable for carousel)
       --carousel-weather SECS   Weather display time in carousel mode (default: 10)
       --carousel-url SECS       URL display time in carousel mode (default: 30)
+      --date-format FMT         iso, long, short, us, dmy, none, or any
+                                strftime format (default: iso)
       --forecast                Second screen with the next 12 hours
       --url-script JS|FILE      JavaScript to run over each page once it
                                 has loaded, inline or read from a file
@@ -114,6 +116,26 @@ Pass `--carousel-weather 0` for a display that only ever moves when it
 is touched, each screen staying put until the next tap.
 
 Press Escape to exit.
+
+### Place and Date
+
+Both screens name the place, and the weather screen carries the date
+above the clock.  The name is the one the place uses for itself, so
+`-l Sweden,Stockholm` shows as `Stockholm`; without `--location` there
+is no name to show and the line carries only the date.
+
+`--date-format` takes `iso` (the default, `2026-09-15`), `long`
+(`Tuesday 15 September`), `short` (`Tue 15 Sep`), `us` (`09/15/2026`),
+`dmy` (`15/9/2026`), or `none` to leave the date off.  Anything
+containing a `%` is handed to strftime as it stands:
+
+```bash
+./breeze -l Surahammar --date-format "%A, week %V"
+```
+
+`long` and `short` spell the day and month according to the locale, so
+they read in Swedish on a Swedish desktop and in English in the
+container, which has no locale set.  `iso` is the same everywhere.
 
 ### The Next 12 Hours
 
@@ -207,6 +229,7 @@ configured.
 | `CAROUSEL_WEATHER` | `--carousel-weather` | Seconds to show the weather view              |
 | `CAROUSEL_FORECAST`| `--carousel-forecast`| Seconds to show the forecast screen           |
 | `CAROUSEL_URL`     | `--carousel-url`     | Seconds to show each URL                      |
+| `DATE_FORMAT`      | `--date-format`      | How to write the date, or `none`              |
 | `FORECAST`         | `--forecast`         | Second screen: `1`, `true`, `yes`, or `on`    |
 | `URL_SCRIPT`       | `--url-script`       | JavaScript to run over each loaded page       |
 | `ZOOM`             | `--zoom`             | Web view zoom factor                          |
