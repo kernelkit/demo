@@ -28,6 +28,8 @@ out of a fair-weather forecast with `--weather`.
   snow settling on the ridge, fog banks, lightning
 - Location lookup by city name (geocoding via Open-Meteo)
 - Touch/click to show a web page (WebKitGTK), auto-returns after 30s
+- Optional second screen with the next 12 hours, the part you cannot see
+  by looking out of the window
 - Carousel mode: cycle between the weather view and one or more URLs
 - Fullscreen kiosk mode, display rotation, and burn-in protection
 
@@ -84,8 +86,9 @@ Options:
       --lat LATITUDE            Latitude for weather (default: 59.3293)
       --lon LONGITUDE           Longitude for weather (default: 18.0686)
       --url URL                 Web page URL (repeatable for carousel)
-      --carousel-weather SECS   Weather display time in carousel mode (default: 60)
+      --carousel-weather SECS   Weather display time in carousel mode (default: 10)
       --carousel-url SECS       URL display time in carousel mode (default: 30)
+      --forecast                Second screen with the next 12 hours
       --url-script JS|FILE      JavaScript to run over each page once it
                                 has loaded, inline or read from a file
       --zoom FACTOR             Web view zoom, e.g. 0.85 to fit more in
@@ -102,11 +105,49 @@ how to show a thunderstorm on a stand in fair weather:
 ./breeze -l Stockholm -f --weather thunder
 ```
 
-Setting either carousel option enables automatic cycling between the
-weather view and the URLs.  Without them, touch/click toggles between
-the views manually, stepping through the URLs round-robin.
+`--forecast` and any of the three `--carousel-*` options put the
+display on a timer, turning it over from one screen to the next every
+ten seconds unless told otherwise.  The order is the weather, the
+forecast when that screen is enabled, then each URL in turn.
+
+Pass `--carousel-weather 0` for a display that only ever moves when it
+is touched, each screen staying put until the next tap.
 
 Press Escape to exit.
+
+### The Next 12 Hours
+
+`--forecast` adds a second screen: temperature over the coming twelve
+hours, what sort of hour each one is, and the chance of rain, drawn over
+the same sky.
+
+```bash
+./breeze -l Surahammar -f --forecast
+```
+
+[![The next 12 hours](screenshots/thumbs/forecast.png)](screenshots/forecast.png)
+
+The two are peers, not a main screen and a detour.  They are two
+screens only because a 7" panel will not hold all of it at once, so
+asking for the second one is asking for the display to turn itself over
+between them -- no URLs, and nothing else to configure:
+
+```bash
+./breeze -l Surahammar -f --forecast
+```
+
+Ten seconds a screen, which `--carousel-weather` overrides.  The
+forecast keeps the same timing unless `--carousel-forecast` says
+otherwise, which is worth setting if you want longer on the curve than
+on the clock:
+
+```bash
+./breeze -l Surahammar -f --forecast --carousel-weather 45 --carousel-forecast 20
+```
+
+Add URLs and they join the same rotation, after the two weather
+screens.  With no timer at all, a tap steps from one screen to the
+next and each stays until the next tap.
 
 ### Fitting a Page to the Screen
 
@@ -164,7 +205,9 @@ configured.
 | `LONGITUDE`        | `--lon`              | Longitude, when `LOCATION` is not used        |
 | `WEB_URL`          | `--url`              | Comma-separated list of URLs                  |
 | `CAROUSEL_WEATHER` | `--carousel-weather` | Seconds to show the weather view              |
+| `CAROUSEL_FORECAST`| `--carousel-forecast`| Seconds to show the forecast screen           |
 | `CAROUSEL_URL`     | `--carousel-url`     | Seconds to show each URL                      |
+| `FORECAST`         | `--forecast`         | Second screen: `1`, `true`, `yes`, or `on`    |
 | `URL_SCRIPT`       | `--url-script`       | JavaScript to run over each loaded page       |
 | `ZOOM`             | `--zoom`             | Web view zoom factor                          |
 | `WEATHER`          | `--weather`          | Force a condition, for demos                  |

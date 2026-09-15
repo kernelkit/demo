@@ -19,6 +19,7 @@
 
 #include "weather.h"
 #include "animations.h"
+#include "forecast.h"
 
 /* ------------------------------------------------------------------ */
 /* Application context                                                */
@@ -29,6 +30,7 @@ typedef struct {
 	GtkWidget *window;
 	GtkWidget *stack;
 	GtkWidget *drawing_area;
+	GtkWidget *forecast_area;
 	GtkWidget *time_label;
 	GtkWidget *temp_label;
 	GtkWidget *desc_label;
@@ -51,6 +53,9 @@ typedef struct {
 	int url_count;
 	int current_url;
 
+	/* Second screen: the hours ahead */
+	gboolean forecast;
+
 	/* Run over each page once it has loaded, NULL when unset */
 	char *url_script;
 	double zoom;
@@ -60,8 +65,9 @@ typedef struct {
 	int demo_cover;
 
 	/* Carousel */
-	int carousel_weather; /* Seconds to show weather (0 = disabled) */
-	int carousel_url;     /* Seconds to show each URL (0 = disabled) */
+	int carousel_weather;  /* Seconds to show weather (0 = no timer) */
+	int carousel_url;      /* Seconds to show each URL (0 = disabled) */
+	int carousel_forecast; /* Seconds to show the forecast (0 = as weather) */
 	guint carousel_timer;
 
 	/* Timer IDs */
@@ -232,6 +238,16 @@ static gboolean on_draw(GtkWidget *widget, cairo_t *cr, gpointer data)
 	return FALSE;
 }
 
+static gboolean on_draw_forecast(GtkWidget *widget, cairo_t *cr, gpointer data)
+{
+	(void)widget;
+	(void)data;
+
+	anim_draw(&app.anim, cr);
+	forecast_draw(&app.weather, cr, app.anim.width, app.anim.height);
+	return FALSE;
+}
+
 static void on_drawing_area_size_allocate(GtkWidget *widget, GdkRectangle *allocation, gpointer data)
 {
 	(void)widget;
@@ -252,11 +268,14 @@ static gboolean on_anim_tick(gpointer data)
 	const gchar *shown = gtk_stack_get_visible_child_name(GTK_STACK(app.stack));
 
 	/* Nothing to animate behind the web view */
-	if (shown && g_strcmp0(shown, "weather") != 0)
+	if (shown && g_strcmp0(shown, "web") == 0)
 		return G_SOURCE_CONTINUE;
 
 	anim_update(&app.anim, dt, &app.weather);
-	gtk_widget_queue_draw(app.drawing_area);
+	if (shown && g_strcmp0(shown, "forecast") == 0)
+		gtk_widget_queue_draw(app.forecast_area);
+	else
+		gtk_widget_queue_draw(app.drawing_area);
 	return G_SOURCE_CONTINUE;
 }
 
@@ -310,6 +329,65 @@ static gboolean on_weather_tick(gpointer data)
 static gboolean on_webview_timeout(gpointer data);
 static void load_next_url(void);
 static void carousel_restart(void);
+static void carousel_arm(int secs);
+static void advance_page(void);
+static void show_page(const char *name);
+
+/*
+ * How long the forecast screen holds the display.  It is a peer of the
+ * weather screen rather than a detour from it -- the pair exist because
+ * a 7" panel cannot show everything at once -- so it keeps the display
+ * for as long as the weather screen unless told otherwise.
+ */
+static int forecast_secs(void)
+{
+	return app.carousel_forecast ? app.carousel_forecast : app.carousel_weather;
+}
+
+/*
+ * Showing a page that is not the web view: hand over, and set the clock
+ * ticking towards the next one.
+ */
+static void show_page(const char *name)
+{
+	gboolean is_forecast = g_strcmp0(name, "forecast") == 0;
+
+	gtk_stack_set_visible_child_name(GTK_STACK(app.stack), name);
+
+	if (app.carousel_weather)
+		carousel_arm(is_forecast ? forecast_secs() : app.carousel_weather);
+}
+
+/*
+ * One step around the rotation: the weather, then the hours ahead when
+ * that screen is enabled, then each URL in turn.  Used by the carousel
+ * timer and by a tap alike, so both agree on what comes next.
+ */
+static void advance_page(void)
+{
+	const gchar *cur = gtk_stack_get_visible_child_name(GTK_STACK(app.stack));
+
+	if (!cur)
+		return;
+
+	if (g_strcmp0(cur, "web") == 0) {
+		show_page("weather");
+		return;
+	}
+
+	if (g_strcmp0(cur, "weather") == 0 && app.forecast) {
+		show_page("forecast");
+		return;
+	}
+
+	if (app.url_count > 0) {
+		load_next_url();
+		return;
+	}
+
+	/* No URLs to show, so the two weather screens are the rotation */
+	show_page(app.forecast && g_strcmp0(cur, "weather") == 0 ? "forecast" : "weather");
+}
 
 static void cancel_load(void)
 {
@@ -365,13 +443,10 @@ static gboolean on_webview_timeout(gpointer data)
 {
 	(void)data;
 
-	gtk_stack_set_visible_child_name(GTK_STACK(app.stack), "weather");
+	show_page("weather");
 	gtk_widget_hide(app.loading_label);
 	app.web_loading = FALSE;
 	app.webview_timeout = 0;
-
-	if (app.carousel_weather)
-		carousel_restart();
 
 	return G_SOURCE_REMOVE;
 }
@@ -379,24 +454,22 @@ static gboolean on_webview_timeout(gpointer data)
 static gboolean on_carousel_tick(gpointer data)
 {
 	(void)data;
-	const gchar *current = gtk_stack_get_visible_child_name(GTK_STACK(app.stack));
-
-	if (current && g_strcmp0(current, "weather") == 0) {
-		/* Weather is showing -- load next URL */
-		if (app.url_count > 0)
-			load_next_url();
-	}
-	/* URL timeout handled by webview_timeout callback */
 
 	app.carousel_timer = 0;
+	advance_page();
 	return G_SOURCE_REMOVE;
+}
+
+static void carousel_arm(int secs)
+{
+	if (app.carousel_timer)
+		g_source_remove(app.carousel_timer);
+	app.carousel_timer = g_timeout_add_seconds(secs > 0 ? secs : 1, on_carousel_tick, NULL);
 }
 
 static void carousel_restart(void)
 {
-	if (app.carousel_timer)
-		g_source_remove(app.carousel_timer);
-	app.carousel_timer = g_timeout_add_seconds(app.carousel_weather, on_carousel_tick, NULL);
+	carousel_arm(app.carousel_weather);
 }
 
 /*
@@ -459,23 +532,20 @@ static void load_next_url(void)
 	app.load_timeout = g_timeout_add_seconds(LOAD_TIMEOUT, on_load_timeout, NULL);
 }
 
-static void toggle_web_view(void)
+static void tapped(void)
 {
-	if (app.url_count == 0)
-		return;
-
 	const gchar *current = gtk_stack_get_visible_child_name(GTK_STACK(app.stack));
 
+	if (app.url_count == 0 && !app.forecast)
+		return;
+
 	if (current && g_strcmp0(current, "web") == 0) {
-		/* Already showing web view -- go back to weather */
+		/* Already showing the web view -- back to the weather */
 		if (app.webview_timeout) {
 			g_source_remove(app.webview_timeout);
 			app.webview_timeout = 0;
 		}
-		gtk_stack_set_visible_child_name(GTK_STACK(app.stack), "weather");
-
-		if (app.carousel_weather)
-			carousel_restart();
+		show_page("weather");
 		return;
 	}
 
@@ -488,13 +558,13 @@ static void toggle_web_view(void)
 		return;
 	}
 
-	/* Stop carousel timer during manual interaction */
+	/* A tap takes over from the carousel until the page hands back */
 	if (app.carousel_timer) {
 		g_source_remove(app.carousel_timer);
 		app.carousel_timer = 0;
 	}
 
-	load_next_url();
+	advance_page();
 }
 
 static gboolean on_button_press(GtkWidget *widget, GdkEventButton *event, gpointer data)
@@ -503,7 +573,7 @@ static gboolean on_button_press(GtkWidget *widget, GdkEventButton *event, gpoint
 	(void)event;
 	(void)data;
 
-	toggle_web_view();
+	tapped();
 	return TRUE;
 }
 
@@ -513,7 +583,7 @@ static gboolean on_touch_event(GtkWidget *widget, GdkEventTouch *event, gpointer
 	(void)data;
 
 	if (event->type == GDK_TOUCH_END)
-		toggle_web_view();
+		tapped();
 
 	return TRUE;
 }
@@ -618,8 +688,10 @@ static void usage(const char *name)
 	       "      --lat LATITUDE            Latitude for weather (default: 59.3293)\n"
 	       "      --lon LONGITUDE           Longitude for weather (default: 18.0686)\n"
 	       "      --url URL                 Web page URL (repeatable for carousel)\n"
-	       "      --carousel-weather SECS   Weather display time in carousel mode (default: 60)\n"
+	       "      --carousel-weather SECS   Weather display time in carousel mode (default: 10)\n"
 	       "      --carousel-url SECS       URL display time in carousel mode (default: 30)\n"
+	       "      --forecast                Second screen with the next 12 hours\n"
+	       "      --carousel-forecast SECS  Forecast display time (default: as weather)\n"
 	       "      --url-script JS|FILE      JavaScript to run over each page once it\n"
 	       "                                has loaded, inline or read from a file\n"
 	       "      --zoom FACTOR             Web view zoom, e.g. 0.85 to fit more in\n"
@@ -636,6 +708,8 @@ static void usage(const char *name)
 	       "  WEB_URL                       Comma-separated list of URLs\n"
 	       "  CAROUSEL_WEATHER              Same as --carousel-weather\n"
 	       "  CAROUSEL_URL                  Same as --carousel-url\n"
+	       "  FORECAST                      Second screen: 1, true, yes, or on\n"
+	       "  CAROUSEL_FORECAST             Same as --carousel-forecast\n"
 	       "  URL_SCRIPT                    Same as --url-script\n"
 	       "  ZOOM                          Same as --zoom\n"
 	       "  WEATHER                       Same as --weather\n"
@@ -718,6 +792,11 @@ static void parse_args(int argc, char *argv[])
 	const char *location;
 	gboolean carousel_set = FALSE;
 
+	/* Below zero until asked for, so an explicit 0 can mean "no timer" */
+	app.carousel_weather = -1;
+	app.carousel_url = -1;
+	app.carousel_forecast = -1;
+
 	env = env_str("LATITUDE");
 	app.latitude = env ? atof(env) : 59.3293; /* Stockholm */
 
@@ -749,6 +828,12 @@ static void parse_args(int argc, char *argv[])
 		carousel_set = TRUE;
 	}
 
+	env = env_str("CAROUSEL_FORECAST");
+	if (env) {
+		app.carousel_forecast = atoi(env);
+		carousel_set = TRUE;
+	}
+
 	env = env_str("CAROUSEL_URL");
 	if (env) {
 		app.carousel_url = atoi(env);
@@ -756,6 +841,7 @@ static void parse_args(int argc, char *argv[])
 	}
 
 	app.fullscreen = env_bool("FULLSCREEN");
+	app.forecast = env_bool("FORECAST");
 
 	env = env_str("URL_SCRIPT");
 	if (env)
@@ -771,18 +857,20 @@ static void parse_args(int argc, char *argv[])
 		app.demo_weather = parse_weather(env);
 
 	static const struct option long_opts[] = {
-		{ "carousel-url",     required_argument, NULL, 'c' },
-		{ "carousel-weather", required_argument, NULL, 'C' },
-		{ "fullscreen",       no_argument,       NULL, 'f' },
-		{ "help",             no_argument,       NULL, 'h' },
-		{ "lat",              required_argument, NULL, 'a' },
-		{ "location",         required_argument, NULL, 'l' },
-		{ "lon",              required_argument, NULL, 'o' },
-		{ "url",              required_argument, NULL, 'u' },
-		{ "url-script",       required_argument, NULL, 'S' },
-		{ "weather",          required_argument, NULL, 'w' },
-		{ "zoom",             required_argument, NULL, 'z' },
-		{ NULL,               0,                 NULL, 0   }
+		{ "carousel-forecast", required_argument, NULL, 'G' },
+		{ "carousel-url",      required_argument, NULL, 'c' },
+		{ "carousel-weather",  required_argument, NULL, 'C' },
+		{ "forecast",          no_argument,       NULL, 'F' },
+		{ "fullscreen",        no_argument,       NULL, 'f' },
+		{ "help",              no_argument,       NULL, 'h' },
+		{ "lat",               required_argument, NULL, 'a' },
+		{ "location",          required_argument, NULL, 'l' },
+		{ "lon",               required_argument, NULL, 'o' },
+		{ "url",               required_argument, NULL, 'u' },
+		{ "url-script",        required_argument, NULL, 'S' },
+		{ "weather",           required_argument, NULL, 'w' },
+		{ "zoom",              required_argument, NULL, 'z' },
+		{ NULL,                0,                 NULL, 0   }
 	};
 	int c;
 
@@ -795,6 +883,11 @@ static void parse_args(int argc, char *argv[])
 			break;
 		case 'C':
 			app.carousel_weather = atoi(optarg);
+			carousel_set = TRUE;
+			break;
+		case 'F': app.forecast = TRUE; break;
+		case 'G':
+			app.carousel_forecast = atoi(optarg);
 			carousel_set = TRUE;
 			break;
 		case 'f': app.fullscreen = TRUE; break;
@@ -812,13 +905,21 @@ static void parse_args(int argc, char *argv[])
 		}
 	}
 
-	/* Apply carousel defaults if any carousel option was set */
-	if (carousel_set) {
-		if (!app.carousel_weather)
-			app.carousel_weather = 60;
-		if (!app.carousel_url)
-			app.carousel_url = 30;
-	}
+	/*
+	 * Asking for a second screen is asking for the display to turn
+	 * itself over: nobody is going to stand there tapping, and the
+	 * forecast is invisible until something moves.  So --forecast puts
+	 * the display on a timer just as the carousel options do.
+	 *
+	 * An explicit 0 is the way out of that, and the way to a display
+	 * that only ever moves when touched.
+	 */
+	if (app.carousel_weather < 0)
+		app.carousel_weather = (carousel_set || app.forecast) ? 10 : 0;
+	if (app.carousel_url < 0)
+		app.carousel_url = 30;
+	if (app.carousel_forecast < 0)
+		app.carousel_forecast = 0; /* 0 keeps the weather screen's timing */
 
 	if (location) {
 		double lat, lon;
@@ -912,9 +1013,12 @@ int main(int argc, char *argv[])
 	GtkWidget *weather_view = create_weather_view();
 	GtkWidget *web_view = create_web_view();
 
+	app.forecast_area = gtk_drawing_area_new();
+	g_signal_connect(app.forecast_area, "draw", G_CALLBACK(on_draw_forecast), NULL);
+
 	gtk_stack_add_named(GTK_STACK(app.stack), weather_view, "weather");
+	gtk_stack_add_named(GTK_STACK(app.stack), app.forecast_area, "forecast");
 	gtk_stack_add_named(GTK_STACK(app.stack), web_view, "web");
-	gtk_stack_set_visible_child_name(GTK_STACK(app.stack), "weather");
 
 	gtk_container_add(GTK_CONTAINER(app.window), app.stack);
 
@@ -933,10 +1037,15 @@ int main(int argc, char *argv[])
 	app.weather_timer = g_timeout_add_seconds(300, on_weather_tick, NULL); /* 5 min */
 
 	/* Start carousel if enabled and URLs are configured */
-	if (app.carousel_weather && app.url_count > 0)
+	if (app.carousel_weather && (app.url_count > 0 || app.forecast))
 		carousel_restart();
 
 	gtk_widget_show_all(app.window);
+
+	/* A stack ignores this until the child itself is visible, so it has
+	 * to come after show_all -- otherwise the page that happens to have
+	 * been added first is the one that comes up. */
+	gtk_stack_set_visible_child_name(GTK_STACK(app.stack), "weather");
 
 	if (app.fullscreen)
 		size_to_monitor();

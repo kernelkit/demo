@@ -5,14 +5,14 @@ CFLAGS     = $(gtk_CFLAGS) -DSUNRISET_LIB -Wall -O2
 LDLIBS     = $(gtk_LIBS) -lm
 
 TARGET     = breeze
-SOURCES    = breeze.c weather.c animations.c sunriset.c
+SOURCES    = breeze.c weather.c animations.c forecast.c sunriset.c
 
 # sunriset.[ch] is vendored, it stays in its upstream formatting
-FMT_FILES  = breeze.c weather.c animations.c weather.h animations.h
+FMT_FILES  = breeze.c weather.c animations.c forecast.c weather.h animations.h forecast.h
 
 all: $(TARGET)
 
-$(TARGET): $(SOURCES) weather.h animations.h sunriset.h
+$(TARGET): $(SOURCES) weather.h animations.h forecast.h sunriset.h
 	$(CC) $(CFLAGS) -o $(TARGET) $(SOURCES) $(LDLIBS)
 
 run: $(TARGET)
